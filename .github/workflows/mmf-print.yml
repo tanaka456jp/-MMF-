@@ -1,0 +1,27 @@
+name: MMF A4 Portrait VBA Contract
+on:
+  push:
+    paths:
+      - 'source/standard/ModuleMMFPrint.bas'
+      - 'source/document/ThisWorkbook.cls'
+      - 'project.json'
+      - 'target/**'
+      - 'tests/**'
+      - '.github/workflows/mmf-print.yml'
+  pull_request:
+    paths:
+      - 'source/standard/ModuleMMFPrint.bas'
+      - 'source/document/ThisWorkbook.cls'
+      - 'project.json'
+      - 'target/**'
+      - 'tests/**'
+      - '.github/workflows/mmf-print.yml'
+permissions:
+  contents: read
+jobs:
+  static-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate workbook headers and VBAUpdater mapping
+        run: python -m unittest discover -s tests -p 'test_mmf_print_contract.py' -v
