@@ -1,0 +1,81 @@
+{
+    "schemaVersion":  "1.0",
+    "projectName":  "外貨建MMF　計算シート",
+    "target":  {
+                   "directory":  "target",
+                   "file":  "外貨建MMF_取得費計算_A4縦.xlsm",
+                   "autoDetectWhenMissing":  true
+               },
+    "source":  {
+                   "root":  "source",
+                   "encoding":  "utf-8"
+               },
+    "components":  [
+                       {
+                           "type":  "document",
+                           "name":  "ThisWorkbook",
+                           "file":  "document/ThisWorkbook.cls"
+                       },
+                       {
+                           "type":  "document",
+                           "name":  "Sheet1",
+                           "file":  "document/Sheet1.cls"
+                       },
+                       {
+                           "type":  "standard",
+                           "name":  "Module1",
+                           "file":  "standard/Module1.bas"
+                       },
+                       {
+                           "type":  "document",
+                           "name":  "Sheet2",
+                           "file":  "document/Sheet2.cls"
+                       },
+                       {
+                           "type":  "document",
+                           "name":  "Sheet4",
+                           "file":  "document/Sheet4.cls"
+                       },
+                       {
+                           "type":  "userform",
+                           "name":  "frmKamoku",
+                           "file":  "userforms/frmKamoku.frm",
+                           "binaryFile":  "userforms/frmKamoku.frx"
+                       },
+                       {
+                           "type":  "document",
+                           "name":  "Sheet3",
+                           "file":  "document/Sheet3.cls"
+                       },
+                       {
+                           "type":  "document",
+                           "name":  "Sheet5",
+                           "file":  "document/Sheet5.cls"
+                       },
+                       {
+                           "type":  "document",
+                           "name":  "Sheet6",
+                           "file":  "document/Sheet6.cls"
+                       }
+                   ],
+    "compileGate":  {
+                        "macro":  "",
+                        "required":  false
+                    },
+    "validation":  {
+                       "requireBackup":  true
+                   },
+    "sync":  {
+                 "deletePolicy":  "report-only",
+                 "managedComponents":  [
+                                           {
+                                               "type":  "standard",
+                                               "name":  "Module1"
+                                           },
+                                           {
+                                               "type":  "userform",
+                                               "name":  "frmKamoku"
+                                           }
+                                       ]
+             }
+}
