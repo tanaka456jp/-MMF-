@@ -28,6 +28,34 @@ Public Sub MMF印刷_1段表示プレビュー()
     End If
 End Sub
 
+' O6で指定した1ページのみ印刷プレビューに表示する。
+' 実印刷は行わないため、ページ構成を確認してから通常の印刷を実行する。
+Public Sub MMF印刷_指定頁プレビュー()
+    Dim ws As Worksheet
+    Dim v As Variant, d As Double
+
+    If Not MMF印刷_更新本体(False) Then Exit Sub
+    Set ws = ThisWorkbook.Worksheets(PRINT_SHEET)
+    v = ws.Range("O6").Value2
+    If Not IsNumeric(v) Then
+        MsgBox "指定ページ番号には1以上の整数を入力してください。", vbExclamation
+        Exit Sub
+    End If
+    d = CDbl(v)
+    If d < 1 Or d > 9999 Or d <> Fix(d) Then
+        MsgBox "指定ページ番号には1以上の整数を入力してください。", vbExclamation
+        Exit Sub
+    End If
+
+    On Error GoTo PreviewFailed
+    ws.PrintOut From:=CLng(d), To:=CLng(d), Preview:=True
+    Exit Sub
+
+PreviewFailed:
+    MsgBox "指定ページのプレビューを開けませんでした。" & vbCrLf & _
+           Err.Description, vbExclamation
+End Sub
+
 ' ThisWorkbook.Workbook_BeforePrint から使用する。
 ' 戻り値Falseの場合は印刷そのものを中止する。
 Public Function MMF印刷_印刷直前更新() As Boolean
@@ -50,6 +78,7 @@ Private Function MMF印刷_更新本体(ByVal quiet As Boolean) As Boolean
     Dim stateCaptured As Boolean, wasProtected As Boolean
     Dim warnRule As FormatCondition, stripeRule As FormatCondition
     Dim failureText As String
+    Dim pageInput As Variant, pageNo As Long
     Dim success As Boolean
 
     If mUpdating Then Exit Function
@@ -65,7 +94,15 @@ Private Function MMF印刷_更新本体(ByVal quiet As Boolean) As Boolean
     On Error GoTo Failed
 
     sourceName = DEFAULT_SOURCE
+    pageNo = 1
     If Not out Is Nothing Then
+        pageInput = out.Range("O6").Value2
+        If Not IsNumeric(pageInput) Then pageInput = out.Range("J4").Value2
+        If IsNumeric(pageInput) Then
+            If CDbl(pageInput) >= 1 And CDbl(pageInput) <= 9999 Then
+                pageNo = CLng(Fix(CDbl(pageInput)))
+            End If
+        End If
         If Len(Trim$(CStr(out.Range("O2").Value2))) > 0 Then
             sourceName = Trim$(CStr(out.Range("O2").Value2))
         ElseIf Len(Trim$(CStr(out.Range("R2").Value2))) > 0 Then
@@ -227,11 +264,17 @@ Private Function MMF印刷_更新本体(ByVal quiet As Boolean) As Boolean
         .Range("O4").Value = bad
         .Range("N5").Value = "更新方法"
         .Range("O5").Value = "Alt+F8：MMF印刷_1段表示へ更新"
+        .Range("N6").Value = "指定ページ番号"
+        .Range("O6").Value = pageNo
+        .Range("N7").Value = "指定頁プレビュー"
+        .Range("O7").Value = "Alt+F8：MMF印刷_指定頁プレビュー"
         .Range("O2").Interior.Color = RGB(255, 245, 211)
         .Range("O2").Font.Color = RGB(30, 88, 160)
-        .Range("N2:N5").Interior.Color = RGB(235, 244, 249)
-        .Range("N2:O5").HorizontalAlignment = xlLeft
-        .Range("O5").ShrinkToFit = True
+        .Range("N2:N7").Interior.Color = RGB(235, 244, 249)
+        .Range("N2:O7").HorizontalAlignment = xlLeft
+        .Range("O5:O7").ShrinkToFit = True
+        .Range("O6").Interior.Color = RGB(255, 245, 211)
+        .Range("O6").Font.Color = RGB(30, 88, 160)
 
         lastOutput = FIRST_PRINT_ROW + n - 1
         If n > 0 Then
@@ -302,6 +345,7 @@ CleanUp:
     On Error Resume Next
     If wasProtected And Not out Is Nothing Then
         out.Range("O2").Locked = False
+        out.Range("O6").Locked = False
         out.Protect Password:=PRINT_PASSWORD, UserInterfaceOnly:=True
     End If
     If stateCaptured Then
