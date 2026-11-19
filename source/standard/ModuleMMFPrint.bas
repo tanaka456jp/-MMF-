@@ -1,221 +1,280 @@
 Attribute VB_Name = "ModuleMMFPrint"
 Option Explicit
 
-' 外貨建MMF: 1取引=1行 / A4縦 印刷用ビュー
-' This module changes only the dedicated print worksheet.
-' 取得費、円換算、移動平均、売却損益は「MMF取引台帳」を正本とする。
-Private Const MMF_PRINT_SHEET As String = "A4縦印刷"
-Private Const MMF_DEFAULT_SOURCE As String = "MMF取引台帳"
-Private Const MMF_FIRST_SOURCE_ROW As Long = 12
-Private Const MMF_LAST_SOURCE_ROW As Long = 511
-Private Const MMF_FIRST_PRINT_ROW As Long = 7
-Private Const MMF_PRINT_PASSWORD As String = "1234"
-Private MMF_PrintLastSuccess As Boolean
+' A4縦 / 1取引1行の印刷専用ビュー。取得費等の計算は一切変更しない。
+' 列構成は対象のMMF取引台帳（A:J入力、K入力判定、L:V計算）に対応。
+Private Const PRINT_SHEET As String = "A4縦印刷"
+Private Const DEFAULT_SOURCE As String = "MMF取引台帳"
+Private Const FIRST_SOURCE_ROW As Long = 12
+Private Const STANDARD_LAST_ROW As Long = 511
+Private Const FIRST_PRINT_ROW As Long = 6
+Private Const PRINT_COLUMNS As Long = 12
+Private Const MAX_PRINT_ROWS As Long = 5000
+Private Const PRINT_PASSWORD As String = "1234"
+Private mUpdating As Boolean
 
-' VBAUpdater適用後、Alt+F8から実行。
-' 対象変更時は印刷用シート R2 に既存の台帳シート名を入力して再実行。
+' VBAUpdater反映後は、このマクロを一度実行する。
 Public Sub MMF印刷_1段表示へ更新()
-    Dim wb As Workbook
-    Dim wsSrc As Worksheet, wsOut As Worksheet
-    Dim sourceName As String
-    Dim i As Long, j As Long, n As Long
-    Dim rr As Long, lastOut As Long
-    Dim data() As Variant
-    Dim headers As Variant, widths As Variant
-    Dim found As Range, fmt As FormatCondition
-    Dim wasProtected As Boolean
-    Dim oldEvents As Boolean, oldScreen As Boolean
-    Dim complete As Boolean, failureMessage As String
+    If MMF印刷_更新本体(False) Then
+        MsgBox "1取引1行・A4縦の印刷明細を更新しました。" & vbCrLf & _
+               "以後はこのシートの印刷・プレビュー直前にも自動更新されます。", vbInformation
+    End If
+End Sub
 
+' このマクロから印刷プレビューすると最新の明細が表示される。
+Public Sub MMF印刷_1段表示プレビュー()
+    If MMF印刷_更新本体(False) Then
+        ThisWorkbook.Worksheets(PRINT_SHEET).PrintPreview
+    End If
+End Sub
+
+' ThisWorkbook.Workbook_BeforePrint から使用する。
+' 戻り値Falseの場合は印刷そのものを中止する。
+Public Function MMF印刷_印刷直前更新() As Boolean
+    If mUpdating Then
+        MMF印刷_印刷直前更新 = True
+        Exit Function
+    End If
+    MMF印刷_印刷直前更新 = MMF印刷_更新本体(True)
+End Function
+
+Private Function MMF印刷_更新本体(ByVal quiet As Boolean) As Boolean
+    Dim wb As Workbook
+    Dim src As Worksheet, out As Worksheet
+    Dim sourceName As String
+    Dim data() As Variant
+    Dim heads As Variant, widths As Variant
+    Dim rowNo As Long, lastSource As Long, lastOutput As Long
+    Dim col As Long, idx As Long, n As Long, bad As Long
+    Dim oldEvents As Boolean, oldScreen As Boolean
+    Dim stateCaptured As Boolean, wasProtected As Boolean
+    Dim warnRule As FormatCondition, stripeRule As FormatCondition
+    Dim failureText As String
+    Dim success As Boolean
+
+    If mUpdating Then Exit Function
     oldEvents = Application.EnableEvents
     oldScreen = Application.ScreenUpdating
-    MMF_PrintLastSuccess = False
-    On Error GoTo Failure
+    stateCaptured = True
+    On Error GoTo Failed
+
+    mUpdating = True
     Set wb = ThisWorkbook
     On Error Resume Next
-    Set wsOut = wb.Worksheets(MMF_PRINT_SHEET)
-    On Error GoTo Failure
+    Set out = wb.Worksheets(PRINT_SHEET)
+    On Error GoTo Failed
 
-    sourceName = MMF_DEFAULT_SOURCE
-    If Not wsOut Is Nothing Then
-        If Len(Trim$(CStr(wsOut.Range("R2").Value2))) > 0 Then
-            sourceName = Trim$(CStr(wsOut.Range("R2").Value2))
-        ElseIf Len(Trim$(CStr(wsOut.Range("J2").Value2))) > 0 Then
-            sourceName = Trim$(CStr(wsOut.Range("J2").Value2))
+    sourceName = DEFAULT_SOURCE
+    If Not out Is Nothing Then
+        If Len(Trim$(CStr(out.Range("O2").Value2))) > 0 Then
+            sourceName = Trim$(CStr(out.Range("O2").Value2))
+        ElseIf Len(Trim$(CStr(out.Range("R2").Value2))) > 0 Then
+            sourceName = Trim$(CStr(out.Range("R2").Value2))
+        ElseIf Len(Trim$(CStr(out.Range("J2").Value2))) > 0 Then
+            sourceName = Trim$(CStr(out.Range("J2").Value2))
         End If
     End If
-    If sourceName = MMF_PRINT_SHEET Then
-        Err.Raise vbObjectError + 400, , "印刷用シート自身を参照することはできません。"
+    If sourceName = PRINT_SHEET Then
+        Err.Raise vbObjectError + 420, , "印刷用シート自身は対象に指定できません。"
     End If
 
     On Error Resume Next
-    Set wsSrc = wb.Worksheets(sourceName)
-    On Error GoTo Failure
-    If wsSrc Is Nothing Then
-        Err.Raise vbObjectError + 401, , "対象台帳「" & sourceName & "」が存在しません。"
+    Set src = wb.Worksheets(sourceName)
+    On Error GoTo Failed
+    If src Is Nothing Then
+        Err.Raise vbObjectError + 421, , "対象台帳「" & sourceName & "」が見つかりません。"
     End If
-    If CStr(wsSrc.Range("A11").Value2) <> "日付" _
-       Or CStr(wsSrc.Range("B11").Value2) <> "取引区分" _
-       Or CStr(wsSrc.Range("T11").Value2) <> "残高数量" Then
-        Err.Raise vbObjectError + 402, , _
-            "対象シートの列構成が想定と異なります。MMF取引台帳を指定してください。"
+    If CStr(src.Range("A11").Value2) <> "日付" _
+       Or CStr(src.Range("B11").Value2) <> "取引区分" _
+       Or CStr(src.Range("K11").Value2) <> "入力判定" _
+       Or CStr(src.Range("T11").Value2) <> "残高数量" _
+       Or CStr(src.Range("V11").Value2) <> "残高・円" Then
+        Err.Raise vbObjectError + 422, , _
+                  "台帳の項目構成が想定と異なります。対象シート名と11行目の項目をご確認ください。"
+    End If
+
+    ' 日付欠落でも他の入力が存在する取引は除外しない。
+    ' 511行を超えて追加した明細も範囲判定に含める。
+    lastSource = STANDARD_LAST_ROW
+    For col = 1 To 10
+        rowNo = src.Cells(src.Rows.Count, col).End(xlUp).Row
+        If rowNo > lastSource Then lastSource = rowNo
+    Next col
+    If lastSource - FIRST_SOURCE_ROW + 1 > MAX_PRINT_ROWS Then
+        Err.Raise vbObjectError + 423, , _
+                  "取引行が上限を超えています。空白以外の入力位置を確認してください。"
     End If
 
     Application.EnableEvents = False
     Application.ScreenUpdating = False
+    src.Calculate
 
-    ' 判定・計算列(K:Y)は触れず、入力列(A:J)に実データのある行だけ表示する。
-    ReDim data(1 To 500, 1 To 15)
-    For i = MMF_FIRST_SOURCE_ROW To MMF_LAST_SOURCE_ROW
-        If Application.WorksheetFunction.CountA(wsSrc.Range("A" & i & ":J" & i)) > 0 Then
+    For rowNo = FIRST_SOURCE_ROW To lastSource
+        If Application.CountA(src.Range("A" & rowNo & ":J" & rowNo)) > 0 Then
             n = n + 1
-            rr = MMF_FIRST_PRINT_ROW + n - 1
-            For j = 1 To 15
-                data(n, j) = MMF_印刷数式(sourceName, i, rr, j)
-            Next j
+            If CStr(src.Cells(rowNo, "K").Value2) <> "OK" Then bad = bad + 1
         End If
-    Next i
+    Next rowNo
 
-    If wsOut Is Nothing Then
-        Set wsOut = wb.Worksheets.Add(After:=wb.Worksheets(wb.Worksheets.Count))
-        wsOut.Name = MMF_PRINT_SHEET
+    If n > 0 Then
+        ReDim data(1 To n, 1 To PRINT_COLUMNS)
+        idx = 0
+        For rowNo = FIRST_SOURCE_ROW To lastSource
+            If Application.CountA(src.Range("A" & rowNo & ":J" & rowNo)) > 0 Then
+                idx = idx + 1
+                For col = 1 To PRINT_COLUMNS
+                    data(idx, col) = MMF印刷_数式(sourceName, rowNo, col)
+                Next col
+            End If
+        Next rowNo
     End If
-    wasProtected = wsOut.ProtectContents
-    If wasProtected Then wsOut.Unprotect Password:=MMF_PRINT_PASSWORD
-    wsOut.Range("A1:R6").UnMerge
-    wsOut.Cells.Clear
 
-    With wsOut
-        .Cells.Font.Name = "Yu Gothic"
-        .Cells.Font.Size = 9
-        .Cells.Font.Color = RGB(30, 49, 65)
-        .Cells.VerticalAlignment = xlCenter
-        .Cells.HorizontalAlignment = xlRight
-        .Cells.ShrinkToFit = True
+    If out Is Nothing Then
+        Set out = wb.Worksheets.Add(After:=wb.Worksheets(wb.Worksheets.Count))
+        out.Name = PRINT_SHEET
+    End If
 
-        widths = Array(9, 4.4, 10.5, 8, 10.7, 10.7, 10, 10, 10, 10.3, 10.7, 10.7, 8.4, 7.4, 15)
-        For j = 1 To 15
-            .Columns(j).ColumnWidth = widths(j - 1)
-        Next j
-        .Columns("P").ColumnWidth = 2
-        .Columns("Q").ColumnWidth = 18
-        .Columns("R").ColumnWidth = 24
+    wasProtected = out.ProtectContents
+    If wasProtected Then out.Unprotect Password:=PRINT_PASSWORD
 
-        .Range("A1:O1").Merge
-        .Range("A1").Value = "外貨建MMF　取得費計算明細　｜　A4縦・1取引1行"
-        .Range("A1:O1").Interior.Color = RGB(25, 54, 76)
-        .Range("A1:O1").Font.Color = vbWhite
-        .Range("A1:O1").Font.Bold = True
-        .Range("A1:O1").Font.Size = 15
+    ' 旧2段レイアウトの結合・書式・計算式をリセットする。
+    out.UsedRange.UnMerge
+    out.UsedRange.Clear
+
+    With out
+        .Range("A1:L" & CStr(Application.Max(6, n + FIRST_PRINT_ROW - 1))).Font.Name = "Yu Gothic"
+        .Range("A1:L" & CStr(Application.Max(6, n + FIRST_PRINT_ROW - 1))).Font.Size = 10
+        .Range("A1:L" & CStr(Application.Max(6, n + FIRST_PRINT_ROW - 1))).Font.Color = RGB(25, 48, 66)
+        .Range("A1:L" & CStr(Application.Max(6, n + FIRST_PRINT_ROW - 1))).VerticalAlignment = xlCenter
+        .Range("A1:L" & CStr(Application.Max(6, n + FIRST_PRINT_ROW - 1))).ShrinkToFit = True
+
+        ' 合計を約114文字幅に抑え、A4縦での縮小率を改善する。
+        widths = Array(10, 5, 11, 11, 11, 11, 11, 11, 12, 11, 9, 14)
+        For col = 1 To PRINT_COLUMNS
+            .Columns(col).ColumnWidth = widths(col - 1)
+        Next col
+        .Columns("M").ColumnWidth = 2
+        .Columns("N").ColumnWidth = 20
+        .Columns("O").ColumnWidth = 28
+
+        .Range("A1:L1").Merge
+        .Range("A1").Value = "外貨建MMF  取得費計算明細｜A4縦・1取引1行"
+        .Range("A1:L1").Interior.Color = RGB(23, 52, 72)
+        .Range("A1:L1").Font.Color = vbWhite
+        .Range("A1:L1").Font.Bold = True
+        .Range("A1:L1").Font.Size = 14
         .Range("A1").HorizontalAlignment = xlLeft
-        .Rows(1).RowHeight = 31
+        .Rows(1).RowHeight = 28
 
         .Range("A2:F2").Merge
         .Range("G2:J2").Merge
-        .Range("K2:O2").Merge
-        .Range("A2").Formula = "=""銘柄・口座：""&" & MMF_参照(sourceName, "B", 3)
-        .Range("G2").Formula = "=""通貨：""&" & MMF_参照(sourceName, "F", 3)
-        .Range("K2").Formula = "=""出力日：""&TEXT(TODAY(),""yyyy/m/d"")"
-        .Range("A2:O2").Interior.Color = RGB(221, 235, 243)
-        .Range("A2:O2").Font.Color = RGB(25, 54, 76)
-        .Range("A2:O2").Font.Bold = True
-        .Range("A2:O2").HorizontalAlignment = xlLeft
+        .Range("K2:L2").Merge
+        .Range("A2").Formula = "=""銘柄・口座：""&" & MMF印刷_参照(sourceName, "B", 3)
+        .Range("G2").Formula = "=""通貨：""&" & MMF印刷_参照(sourceName, "F", 3)
+        .Range("K2").Formula = "=""出力：""&TEXT(TODAY(),""yy/m/d"")"
+        .Range("A2:L2").Interior.Color = RGB(219, 234, 243)
+        .Range("A2:L2").Font.Color = RGB(23, 52, 72)
+        .Range("A2:L2").Font.Bold = True
+        .Range("A2:L2").HorizontalAlignment = xlLeft
         .Rows(2).RowHeight = 22
 
-        .Range("A3:F3").Merge
-        .Range("G3:J3").Merge
-        .Range("K3:O3").Merge
-        .Range("A3").Formula = "=""期首数量：""&TEXT(" & MMF_参照(sourceName, "B", 4) & ",""#,##0.########"")"
-        .Range("G3").Formula = "=""期首外貨簿価：""&TEXT(" & MMF_参照(sourceName, "D", 4) & ",""#,##0.########"")"
-        .Range("K3").Formula = "=""期首円貨簿価：""&TEXT(" & MMF_参照(sourceName, "F", 4) & ",""#,##0"")"
-        .Range("A3:O3").Interior.Color = RGB(235, 245, 249)
-        .Range("A3:O3").HorizontalAlignment = xlLeft
+        .Range("A3:D3").Merge
+        .Range("E3:H3").Merge
+        .Range("I3:L3").Merge
+        .Range("A3").Formula = "=""期首数量：""&TEXT(" & MMF印刷_参照(sourceName, "B", 4) & ",""#,##0.########"")"
+        .Range("E3").Formula = "=""期首外貨：""&TEXT(" & MMF印刷_参照(sourceName, "D", 4) & ",""#,##0.########"")"
+        .Range("I3").Formula = "=""期首円貨：""&TEXT(" & MMF印刷_参照(sourceName, "F", 4) & ",""#,##0"")"
+        .Range("A3:L3").Interior.Color = RGB(238, 247, 251)
+        .Range("A3:L3").HorizontalAlignment = xlLeft
         .Rows(3).RowHeight = 21
 
-        .Range("A4:O4").Merge
-        .Range("A4").Value = "買・累投は買付数量と買付価額、売は売付数量と売付価額を表示。売取得費と売損益は売付時のみ表示。"
-        .Range("A5:O5").Merge
-        .Range("A5").Value = "残高は移動平均法による取得原価（時価ではありません）。「要確認」の取引は元台帳の入力判定をご確認ください。"
-        .Range("A4:O5").HorizontalAlignment = xlLeft
-        .Range("A4:O5").Interior.Color = RGB(239, 248, 251)
-        .Range("A4:O5").Font.Size = 8.5
-        .Rows("4:5").RowHeight = 19
+        .Range("A4:L4").Merge
+        .Range("A4").Value = "売買額は外貨・円貨を併記。売却取得費・売却損益は円貨表示。残高は時価ではなく移動平均取得原価です。"
+        .Range("A4:L4").Interior.Color = RGB(245, 248, 250)
+        .Range("A4:L4").HorizontalAlignment = xlLeft
+        .Range("A4:L4").Font.Size = 8.5
+        .Rows(4).RowHeight = 19
 
-        headers = Array("取引日", "区分", "売買数量", "買付単価", _
-                        "売買価額" & vbLf & "外貨", "売買価額" & vbLf & "円貨", _
-                        "売取得費" & vbLf & "外貨", "売取得費" & vbLf & "円貨", _
-                        "売損益" & vbLf & "円貨", "残数量", "残高" & vbLf & "外貨", _
-                        "残高" & vbLf & "円貨", "換算レート", "為替区分", "備考／確認")
-        For j = 1 To 15
-            .Cells(6, j).Value = headers(j - 1)
-        Next j
-        With .Range("A6:O6")
-            .Interior.Color = RGB(32, 71, 97)
+        heads = Array("取引日", "区分", "売買数量", "売買額" & vbLf & "外貨", _
+                      "売買額" & vbLf & "円貨", "売取得費" & vbLf & "円貨", _
+                      "売損益" & vbLf & "円貨", "残数量", "残高" & vbLf & "外貨", _
+                      "残高" & vbLf & "円貨", "換算" & vbLf & "レート", "備考・確認")
+        For col = 1 To PRINT_COLUMNS
+            .Cells(5, col).Value = heads(col - 1)
+        Next col
+        With .Range("A5:L5")
+            .Interior.Color = RGB(31, 70, 95)
             .Font.Color = vbWhite
             .Font.Bold = True
-            .Font.Size = 8.5
+            .Font.Size = 9
             .HorizontalAlignment = xlCenter
             .VerticalAlignment = xlCenter
             .WrapText = True
             .ShrinkToFit = True
         End With
-        .Rows(6).RowHeight = 34
+        .Rows(5).RowHeight = 31
 
-        .Range("Q1:R1").Merge
-        .Range("Q1").Value = "印刷対象の設定（印刷対象外）"
-        .Range("Q1:R1").Interior.Color = RGB(32, 71, 97)
-        .Range("Q1:R1").Font.Color = vbWhite
-        .Range("Q1:R1").Font.Bold = True
-        .Range("Q2").Value = "対象シート名"
-        .Range("R2").Value = sourceName
-        .Range("R2").Font.Color = RGB(24, 80, 167)
-        .Range("R2").Interior.Color = RGB(255, 242, 199)
-        .Range("Q3").Value = "明細件数"
-        .Range("R3").Value = n
-        .Range("Q4").Value = "変更・追加後"
-        .Range("R4").Value = "Alt+F8 → MMF印刷_1段表示へ更新"
-        .Range("R4").WrapText = True
-        .Rows(4).RowHeight = 29
-        .Range("Q2:Q4").Interior.Color = RGB(231, 241, 247)
-        .Range("Q2:Q4").HorizontalAlignment = xlLeft
-        .Range("R2:R4").HorizontalAlignment = xlLeft
+        .Range("N1:O1").Merge
+        .Range("N1").Value = "印刷設定（用紙には出しません）"
+        .Range("N1:O1").Interior.Color = RGB(31, 70, 95)
+        .Range("N1:O1").Font.Color = vbWhite
+        .Range("N2").Value = "参照台帳シート名"
+        .Range("O2").Value = sourceName
+        .Range("N3").Value = "印刷取引件数"
+        .Range("O3").Value = n
+        .Range("N4").Value = "入力要確認件数"
+        .Range("O4").Value = bad
+        .Range("N5").Value = "更新方法"
+        .Range("O5").Value = "Alt+F8：MMF印刷_1段表示へ更新"
+        .Range("O2").Interior.Color = RGB(255, 245, 211)
+        .Range("O2").Font.Color = RGB(30, 88, 160)
+        .Range("N2:N5").Interior.Color = RGB(235, 244, 249)
+        .Range("N2:O5").HorizontalAlignment = xlLeft
+        .Range("O5").ShrinkToFit = True
 
-        lastOut = MMF_FIRST_PRINT_ROW + n - 1
+        lastOutput = FIRST_PRINT_ROW + n - 1
         If n > 0 Then
-            .Range("A" & MMF_FIRST_PRINT_ROW).Resize(n, 15).Formula = data
-            With .Range("A7:O" & lastOut)
-                .RowHeight = 20
-                .Font.Size = 9
+            ' n×12の正確なサイズで一括書込み（旧版は500×15のまま代入）。
+            .Range("A" & FIRST_PRINT_ROW).Resize(n, PRINT_COLUMNS).Formula = data
+            With .Range("A6:L" & lastOutput)
+                .RowHeight = 21
+                .Font.Size = 10
                 .Borders.LineStyle = xlContinuous
-                .Borders.Color = RGB(217, 228, 235)
+                .Borders.Color = RGB(222, 231, 238)
                 .Borders.Weight = xlHairline
             End With
-            With .Range("A7:O" & lastOut).FormatConditions
+            With .Range("A6:L" & lastOutput).FormatConditions
                 .Delete
-                Set fmt = .Add(Type:=xlExpression, Formula1:="=MOD(ROW(),2)=0")
-                fmt.Interior.Color = RGB(241, 248, 252)
+                Set stripeRule = .Add(Type:=xlExpression, Formula1:="=MOD(ROW(),2)=0")
+                stripeRule.Interior.Color = RGB(244, 249, 252)
+                Set warnRule = .Add(Type:=xlExpression, Formula1:="=LEFT($L6,3)=""要確認""")
+                warnRule.Interior.Color = RGB(255, 233, 226)
+                warnRule.Font.Color = RGB(156, 37, 32)
+                warnRule.SetFirstPriority
+                warnRule.StopIfTrue = True
             End With
-            .Range("A7:A" & lastOut).NumberFormat = "yy/m/d"
-            .Range("C7:C" & lastOut).NumberFormat = "#,##0.########;[Red](#,##0.########);-"
-            .Range("D7:E" & lastOut).NumberFormat = "#,##0.########;[Red](#,##0.########);-"
-            .Range("F7:F" & lastOut).NumberFormat = "#,##0;[Red](#,##0);-"
-            .Range("G7:G" & lastOut).NumberFormat = "#,##0.########;[Red](#,##0.########);-"
-            .Range("H7:I" & lastOut).NumberFormat = "#,##0;[Red](#,##0);-"
-            .Range("J7:K" & lastOut).NumberFormat = "#,##0.########;[Red](#,##0.########);-"
-            .Range("L7:L" & lastOut).NumberFormat = "#,##0;[Red](#,##0);-"
-            .Range("M7:M" & lastOut).NumberFormat = "0.####;[Red](0.####);-"
-            .Range("B7:B" & lastOut).HorizontalAlignment = xlCenter
-            .Range("N7:N" & lastOut).HorizontalAlignment = xlCenter
-            .Range("O7:O" & lastOut).HorizontalAlignment = xlLeft
+            .Range("A6:A" & lastOutput).NumberFormat = "yyyy/m/d"
+            .Range("C6:D" & lastOutput).NumberFormat = "#,##0.########;[Red](#,##0.########);-"
+            .Range("E6:G" & lastOutput).NumberFormat = "#,##0;[Red](#,##0);-"
+            .Range("H6:I" & lastOutput).NumberFormat = "#,##0.########;[Red](#,##0.########);-"
+            .Range("J6:J" & lastOutput).NumberFormat = "#,##0;[Red](#,##0);-"
+            .Range("K6:K" & lastOutput).NumberFormat = "0.####;[Red](0.####);-"
+            .Range("B6:B" & lastOutput).HorizontalAlignment = xlCenter
+            .Range("L6:L" & lastOutput).HorizontalAlignment = xlLeft
+            .Range("L6:L" & lastOutput).Font.Size = 8.5
         Else
-            lastOut = 6
+            lastOutput = 6
+            .Range("A6:L6").Merge
+            .Range("A6").Value = "印刷対象の取引はありません。元台帳のA～J列を確認してください。"
+            .Range("A6").HorizontalAlignment = xlLeft
+            .Rows(6).RowHeight = 24
         End If
 
         .Activate
-        ActiveWindow.DisplayGridlines = False
-        .PageSetup.PrintArea = "$A$1:$O$" & lastOut
-        .PageSetup.PrintTitleRows = "$1:$6"
+        If Not ActiveWindow Is Nothing Then ActiveWindow.DisplayGridlines = False
         With .PageSetup
+            .PrintArea = "$A$1:$L$" & CStr(lastOutput)
+            .PrintTitleRows = "$1:$5"
             .PaperSize = xlPaperA4
             .Orientation = xlPortrait
             .Zoom = False
@@ -230,103 +289,102 @@ Public Sub MMF印刷_1段表示へ更新()
             .CenterHorizontally = True
             .CenterVertically = False
             .PrintGridlines = False
-            .CenterFooter = "外貨建MMF 取得費計算　　&P / &N"
+            .CenterFooter = "外貨建MMF 取得費計算　&P / &N"
             .RightFooter = "&D"
         End With
-        .Range("A7").Select
     End With
-    complete = True
-    MMF_PrintLastSuccess = True
+    out.Calculate
+    success = True
+    MMF印刷_更新本体 = True
 
-CleanExit:
+CleanUp:
     On Error Resume Next
-    If wasProtected Then
-        wsOut.Range("R2").Locked = False
-        wsOut.Protect Password:=MMF_PRINT_PASSWORD, UserInterfaceOnly:=True
+    If wasProtected And Not out Is Nothing Then
+        out.Range("O2").Locked = False
+        out.Protect Password:=PRINT_PASSWORD, UserInterfaceOnly:=True
     End If
-    Application.EnableEvents = oldEvents
-    Application.ScreenUpdating = oldScreen
+    If stateCaptured Then
+        Application.EnableEvents = oldEvents
+        Application.ScreenUpdating = oldScreen
+    End If
+    mUpdating = False
     On Error GoTo 0
-    If complete Then
-        MsgBox "A4縦・1取引1行の印刷明細を更新しました。" & vbCrLf & _
-               "取引件数：" & CStr(n) & " 件。印刷プレビューで文字の大きさをご確認ください。", vbInformation
-    Else
-        MsgBox "印刷明細を更新できませんでした。" & vbCrLf & failureMessage, vbExclamation
+
+    If Not success Then
+        MsgBox "印刷明細の更新に失敗しました。印刷を中止してください。" & vbCrLf & _
+               failureText, vbExclamation
+    ElseIf bad > 0 And Not quiet Then
+        MsgBox "更新しました。ただし入力要確認の取引が " & bad & " 件あります。" & vbCrLf & _
+               "赤色行と元台帳の入力判定を確認してください。", vbExclamation
     End If
-    Exit Sub
+    Exit Function
 
-Failure:
-    failureMessage = Err.Description
-    Resume CleanExit
-End Sub
-
-' 入力変更・対象シート変更を反映してからプレビューを開く。
-Public Sub MMF印刷_1段表示プレビュー()
-    MMF印刷_1段表示へ更新
-    If MMF_PrintLastSuccess Then
-        ThisWorkbook.Worksheets(MMF_PRINT_SHEET).PrintPreview
-    End If
-End Sub
-
-Private Function MMF_参照(ByVal sheetName As String, ByVal col As String, ByVal rowNum As Long) As String
-    MMF_参照 = "'" & Replace(sheetName, "'", "''") & "'!" & col & CStr(rowNum)
+Failed:
+    failureText = Err.Description
+    MMF印刷_更新本体 = False
+    Resume CleanUp
 End Function
 
-Private Function MMF_空欄対応(ByVal expression As String, ByVal printRow As Long) As String
+' 数式は元台帳の算定結果を参照するだけ。入力のある日付欠落行も「日付未入力」で出力する。
+Private Function MMF印刷_参照(ByVal sheetName As String, ByVal col As String, ByVal rowNo As Long) As String
+    MMF印刷_参照 = "'" & Replace(sheetName, "'", "''") & "'!" & col & CStr(rowNo)
+End Function
+
+Private Function MMF印刷_表示式(ByVal expression As String) As String
     Dim q As String
     q = Chr$(34)
-    MMF_空欄対応 = "=IFERROR(IF($A" & CStr(printRow) & "=" & q & q & "," & q & q & _
-                    ",IF(" & expression & "=" & q & q & "," & q & q & "," & expression & "))," & q & q & ")"
+    MMF印刷_表示式 = "=IFERROR(IF(" & expression & "=" & q & q & _
+                     "," & q & q & "," & expression & ")," & q & q & ")"
 End Function
 
-Private Function MMF_印刷数式(ByVal sourceName As String, ByVal srcRow As Long, _
-                               ByVal printRow As Long, ByVal colNo As Long) As String
-    Dim a As String, b As String, e As String, k As String
-    Dim expr As String, q As String
+Private Function MMF印刷_数式(ByVal sheetName As String, _
+                                ByVal sourceRow As Long, ByVal colNo As Long) As String
+    Dim q As String, b As String, k As String, expr As String
     q = Chr$(34)
-    a = MMF_参照(sourceName, "A", srcRow)
-    b = MMF_参照(sourceName, "B", srcRow)
-    e = MMF_参照(sourceName, "E", srcRow)
-    k = MMF_参照(sourceName, "K", srcRow)
+    b = MMF印刷_参照(sheetName, "B", sourceRow)
+    k = MMF印刷_参照(sheetName, "K", sourceRow)
 
     Select Case colNo
         Case 1
-            ' A列自体は空欄判定用のため、自己参照を避ける。
-            MMF_印刷数式 = "=IFERROR(IF(" & a & "=" & q & q & "," & q & q & "," & a & ")," & q & q & ")"
+            expr = MMF印刷_参照(sheetName, "A", sourceRow)
+            MMF印刷_数式 = "=IFERROR(IF(" & expr & "=" & q & q & _
+                            "," & q & "日付未入力" & q & "," & expr & ")," & q & "日付要確認" & q & ")"
             Exit Function
         Case 2
             expr = b
         Case 3
-            expr = "IF($B" & printRow & "=" & q & "売" & q & "," & e & "," & MMF_参照(sourceName, "C", srcRow) & ")"
+            expr = "IF(" & b & "=" & q & "売" & q & "," & _
+                   MMF印刷_参照(sheetName, "E", sourceRow) & "," & _
+                   MMF印刷_参照(sheetName, "C", sourceRow) & ")"
         Case 4
-            expr = "IF($B" & printRow & "=" & q & "売" & q & "," & q & q & "," & MMF_参照(sourceName, "D", srcRow) & ")"
+            expr = "IF(" & b & "=" & q & "売" & q & "," & _
+                   MMF印刷_参照(sheetName, "O", sourceRow) & "," & _
+                   MMF印刷_参照(sheetName, "M", sourceRow) & ")"
         Case 5
-            expr = "IF($B" & printRow & "=" & q & "売" & q & "," & MMF_参照(sourceName, "O", srcRow) & "," & MMF_参照(sourceName, "M", srcRow) & ")"
+            expr = "IF(" & b & "=" & q & "売" & q & "," & _
+                   MMF印刷_参照(sheetName, "P", sourceRow) & "," & _
+                   MMF印刷_参照(sheetName, "N", sourceRow) & ")"
         Case 6
-            expr = "IF($B" & printRow & "=" & q & "売" & q & "," & MMF_参照(sourceName, "P", srcRow) & "," & MMF_参照(sourceName, "N", srcRow) & ")"
+            expr = "IF(" & b & "=" & q & "売" & q & "," & _
+                   MMF印刷_参照(sheetName, "R", sourceRow) & "," & q & q & ")"
         Case 7
-            expr = "IF($B" & printRow & "=" & q & "売" & q & "," & MMF_参照(sourceName, "Q", srcRow) & "," & q & q & ")"
+            expr = "IF(" & b & "=" & q & "売" & q & "," & _
+                   MMF印刷_参照(sheetName, "S", sourceRow) & "," & q & q & ")"
         Case 8
-            expr = "IF($B" & printRow & "=" & q & "売" & q & "," & MMF_参照(sourceName, "R", srcRow) & "," & q & q & ")"
+            expr = MMF印刷_参照(sheetName, "T", sourceRow)
         Case 9
-            expr = "IF($B" & printRow & "=" & q & "売" & q & "," & MMF_参照(sourceName, "S", srcRow) & "," & q & q & ")"
+            expr = MMF印刷_参照(sheetName, "U", sourceRow)
         Case 10
-            expr = MMF_参照(sourceName, "T", srcRow)
+            expr = MMF印刷_参照(sheetName, "V", sourceRow)
         Case 11
-            expr = MMF_参照(sourceName, "U", srcRow)
+            expr = MMF印刷_参照(sheetName, "L", sourceRow)
         Case 12
-            expr = MMF_参照(sourceName, "V", srcRow)
-        Case 13
-            expr = MMF_参照(sourceName, "L", srcRow)
-        Case 14
-            expr = MMF_参照(sourceName, "H", srcRow)
-        Case 15
             expr = "IF(" & k & "=" & q & "OK" & q & "," & _
-                    MMF_参照(sourceName, "J", srcRow) & "," & _
-                    q & "要確認：" & q & "&" & k & "&" & q & " " & q & _
-                    "&" & MMF_参照(sourceName, "J", srcRow) & ")"
+                   MMF印刷_参照(sheetName, "J", sourceRow) & "," & _
+                   q & "要確認：" & q & "&" & k & "&" & q & " " & q & _
+                   "&" & MMF印刷_参照(sheetName, "J", sourceRow) & ")"
         Case Else
-            Err.Raise vbObjectError + 403, , "未定義の印刷列：" & CStr(colNo)
+            Err.Raise vbObjectError + 424, , "未定義の印刷列：" & CStr(colNo)
     End Select
-    MMF_印刷数式 = MMF_空欄対応(expr, printRow)
+    MMF印刷_数式 = MMF印刷_表示式(expr)
 End Function
