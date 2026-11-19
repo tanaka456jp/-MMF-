@@ -398,9 +398,11 @@ Private Function MMF印刷_数式(ByVal sheetName As String, _
         Case 2
             expr = b
         Case 3
-            expr = "IF(" & b & "=" & q & "売" & q & "," & _
-                   MMF印刷_参照(sheetName, "E", sourceRow) & "," & _
-                   MMF印刷_参照(sheetName, "C", sourceRow) & ")"
+            expr = "IF(" & b & "=" & q & "売" & q & ",IF(" & _
+                   MMF印刷_参照(sheetName, "E", sourceRow) & "=" & q & q & "," & q & q & "," & _
+                   MMF印刷_参照(sheetName, "E", sourceRow) & "),IF(" & _
+                   MMF印刷_参照(sheetName, "C", sourceRow) & "=" & q & q & "," & q & q & "," & _
+                   MMF印刷_参照(sheetName, "C", sourceRow) & "))"
         Case 4
             expr = "IF(" & b & "=" & q & "売" & q & "," & _
                    MMF印刷_参照(sheetName, "O", sourceRow) & "," & _
@@ -424,10 +426,12 @@ Private Function MMF印刷_数式(ByVal sheetName As String, _
         Case 11
             expr = MMF印刷_参照(sheetName, "L", sourceRow)
         Case 12
-            expr = "IF(" & k & "=" & q & "OK" & q & "," & _
-                   MMF印刷_参照(sheetName, "J", sourceRow) & "," & _
+            expr = "IF(" & k & "=" & q & "OK" & q & ",IF(" & _
+                   MMF印刷_参照(sheetName, "J", sourceRow) & "=" & q & q & "," & q & q & "," & _
+                   MMF印刷_参照(sheetName, "J", sourceRow) & ")," & _
                    q & "要確認：" & q & "&" & k & "&" & q & " " & q & _
-                   "&" & MMF印刷_参照(sheetName, "J", sourceRow) & ")"
+                   "&IF(" & MMF印刷_参照(sheetName, "J", sourceRow) & "=" & q & q & _
+                   "," & q & q & "," & MMF印刷_参照(sheetName, "J", sourceRow) & "))"
         Case Else
             Err.Raise vbObjectError + 424, , "未定義の印刷列：" & CStr(colNo)
     End Select
