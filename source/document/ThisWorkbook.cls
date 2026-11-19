@@ -227,3 +227,22 @@ Private Sub Workbook_BeforeClose(Cancel As Boolean)
     Call ResetSpaceKey
 
 End Sub
+
+
+' A4印刷専用シートだけ印刷直前に再集計する。
+' 通常の出納帳・台帳や別ブックの印刷には介入しない。
+Private Sub Workbook_BeforePrint(Cancel As Boolean)
+    On Error GoTo PrintFailed
+
+    If Not (ActiveWorkbook Is Me) Then Exit Sub
+    If TypeName(ActiveSheet) <> "Worksheet" Then Exit Sub
+    If ActiveSheet.Name <> "A4縦印刷" Then Exit Sub
+
+    If Not MMF印刷_印刷直前更新() Then Cancel = True
+    Exit Sub
+
+PrintFailed:
+    Cancel = True
+    MsgBox "A4縦印刷シートの更新中に問題が発生したため、印刷を中止しました。" & _
+           vbCrLf & Err.Description, vbExclamation
+End Sub
