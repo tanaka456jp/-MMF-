@@ -111,6 +111,13 @@ class PrintContractTests(unittest.TestCase):
         self.assertIn('If Not MMF印刷_印刷直前更新() Then Cancel = True', WORKBOOK)
         self.assertIn('If mUpdating Then', MODULE)
 
+    def test_legacy_page_selection_is_preserved(self):
+        self.assertIn('pageInput = out.Range("J4").Value2', MODULE)
+        self.assertIn('pageInput = out.Range("O6").Value2', MODULE)
+        self.assertIn('Public Sub MMF印刷_指定頁プレビュー()', MODULE)
+        self.assertIn('ws.PrintOut From:=CLng(d), To:=CLng(d), Preview:=True', MODULE)
+        self.assertIn('out.Range("O6").Locked = False', MODULE)
+
     def test_core_calculation_is_not_rewritten(self):
         self.assertIn('expr = MMF印刷_参照(sheetName, "T", sourceRow)', MODULE)
         self.assertIn('expr = MMF印刷_参照(sheetName, "U", sourceRow)', MODULE)
