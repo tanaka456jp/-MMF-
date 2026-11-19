@@ -10,6 +10,7 @@ Private Const MMF_FIRST_SOURCE_ROW As Long = 12
 Private Const MMF_LAST_SOURCE_ROW As Long = 511
 Private Const MMF_FIRST_PRINT_ROW As Long = 7
 Private Const MMF_PRINT_PASSWORD As String = "1234"
+Private MMF_PrintLastSuccess As Boolean
 
 ' VBAUpdater適用後、Alt+F8から実行。
 ' 対象変更時は印刷用シート R2 に既存の台帳シート名を入力して再実行。
@@ -26,6 +27,9 @@ Public Sub MMF印刷_1段表示へ更新()
     Dim oldEvents As Boolean, oldScreen As Boolean
     Dim complete As Boolean, failureMessage As String
 
+    oldEvents = Application.EnableEvents
+    oldScreen = Application.ScreenUpdating
+    MMF_PrintLastSuccess = False
     On Error GoTo Failure
     Set wb = ThisWorkbook
     On Error Resume Next
@@ -57,8 +61,6 @@ Public Sub MMF印刷_1段表示へ更新()
             "対象シートの列構成が想定と異なります。MMF取引台帳を指定してください。"
     End If
 
-    oldEvents = Application.EnableEvents
-    oldScreen = Application.ScreenUpdating
     Application.EnableEvents = False
     Application.ScreenUpdating = False
 
@@ -228,12 +230,13 @@ Public Sub MMF印刷_1段表示へ更新()
             .CenterHorizontally = True
             .CenterVertically = False
             .PrintGridlines = False
-            .OddFooter.Center.Text = "外貨建MMF 取得費計算　　&P / &N"
-            .OddFooter.Right.Text = "&D"
+            .CenterFooter = "外貨建MMF 取得費計算　　&P / &N"
+            .RightFooter = "&D"
         End With
         .Range("A7").Select
     End With
     complete = True
+    MMF_PrintLastSuccess = True
 
 CleanExit:
     On Error Resume Next
@@ -260,7 +263,7 @@ End Sub
 ' 入力変更・対象シート変更を反映してからプレビューを開く。
 Public Sub MMF印刷_1段表示プレビュー()
     MMF印刷_1段表示へ更新
-    If Not ThisWorkbook.Worksheets(MMF_PRINT_SHEET) Is Nothing Then
+    If MMF_PrintLastSuccess Then
         ThisWorkbook.Worksheets(MMF_PRINT_SHEET).PrintPreview
     End If
 End Sub
