@@ -189,7 +189,8 @@ Private Function MMF印刷_更新本体(ByVal quiet As Boolean) As Boolean
         .Rows(3).RowHeight = 21
 
         .Range("A4:L4").Merge
-        .Range("A4").Value = "売買額は外貨・円貨を併記。売却取得費・売却損益は円貨表示。残高は時価ではなく移動平均取得原価です。"
+        .Range("A4").Value = "売買額は外貨・円貨、売却取得費・損益は円貨。残高は移動平均取得原価。入力要確認：" & CStr(bad) & " 件"
+        If bad > 0 Then .Range("A4").Font.Color = RGB(159, 39, 33)
         .Range("A4:L4").Interior.Color = RGB(245, 248, 250)
         .Range("A4:L4").HorizontalAlignment = xlLeft
         .Range("A4:L4").Font.Size = 8.5
