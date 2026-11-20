@@ -61,6 +61,11 @@
             "type": "standard",
             "name": "ModuleMMFPrint",
             "file": "standard/ModuleMMFPrint.bas"
+        },
+        {
+            "type": "standard",
+            "name": "ModuleMMFInput",
+            "file": "standard/ModuleMMFInput.bas"
         }
     ],
     "compileGate": {
@@ -88,6 +93,10 @@
             {
                 "type": "document",
                 "name": "ThisWorkbook"
+            },
+            {
+                "type": "standard",
+                "name": "ModuleMMFInput"
             }
         ]
     }
