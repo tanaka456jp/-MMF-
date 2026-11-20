@@ -28,6 +28,111 @@ Public Sub MMF印刷_1段表示プレビュー()
     End If
 End Sub
 
+' 「A4印刷」ボタンから実行する。
+' 直接印刷はせず、最新の印刷明細を再作成してからExcelの印刷ダイアログを開く。
+Public Sub MMF印刷_A4印刷()
+    Dim printWs As Worksheet
+    Dim returnWs As Worksheet
+    Dim checkCount As Long
+
+    On Error GoTo PrintFailed
+    If ActiveWorkbook Is ThisWorkbook Then
+        If TypeName(ActiveSheet) = "Worksheet" Then Set returnWs = ActiveSheet
+    End If
+
+    If Not MMF印刷_更新本体(True) Then GoTo CleanExit
+    Set printWs = ThisWorkbook.Worksheets(PRINT_SHEET)
+    checkCount = CLng(Val(CStr(printWs.Range("O4").Value2)))
+
+    If checkCount > 0 Then
+        If MsgBox("入力要確認の取引が " & checkCount & " 件あります。" & vbCrLf & _
+                  "赤色の行と元台帳の入力判定を確認してください。" & vbCrLf & _
+                  "このまま印刷ダイアログを開きますか？", _
+                  vbYesNo + vbExclamation + vbDefaultButton2, _
+                  "外貨建MMF A4印刷") <> vbYes Then GoTo CleanExit
+    End If
+
+    ' 印刷ダイアログの対象を「A4縦印刷」1シートだけにする。
+    printWs.Select Replace:=True
+    Application.Dialogs(xlDialogPrint).Show
+
+CleanExit:
+    On Error Resume Next
+    If Not returnWs Is Nothing Then returnWs.Activate
+    On Error GoTo 0
+    Exit Sub
+
+PrintFailed:
+    MsgBox "A4印刷ダイアログを開けませんでした。" & vbCrLf & _
+           Err.Description, vbExclamation, "外貨建MMF"
+    Resume CleanExit
+End Sub
+
+' VBAUpdater反映後のブック起動時にボタンを配置する。
+' 一度配置したボタンは同じ名前で更新するため、二重作成しない。
+Public Sub MMF印刷_ボタン設置()
+    Dim ledger As Worksheet
+    Dim output As Worksheet
+
+    On Error GoTo SetupFailed
+    Set ledger = ThisWorkbook.Worksheets(DEFAULT_SOURCE)
+    MMF印刷_ボタン更新 ledger, ledger.Range("I3:L4"), "MMF_A4PrintButtonLedger"
+
+    On Error Resume Next
+    Set output = ThisWorkbook.Worksheets(PRINT_SHEET)
+    On Error GoTo SetupFailed
+    If Not output Is Nothing Then
+        If Not output.ProtectContents Then
+            MMF印刷_ボタン更新 output, output.Range("N9:O10"), "MMF_A4PrintButtonView"
+        End If
+    End If
+    Exit Sub
+
+SetupFailed:
+    MsgBox "A4印刷ボタンを配置できませんでした。" & vbCrLf & _
+           Err.Description, vbExclamation, "外貨建MMF"
+End Sub
+
+' 入力欄・表の値には触れず、図形だけを再配置・更新する。
+Private Sub MMF印刷_ボタン更新(ByVal ws As Worksheet, ByVal target As Range, _
+                              ByVal shapeId As String)
+    Dim btn As Shape
+
+    On Error Resume Next
+    Set btn = ws.Shapes(shapeId)
+    On Error GoTo 0
+
+    If btn Is Nothing Then
+        Set btn = ws.Shapes.AddShape(msoShapeRoundedRectangle, _
+                                   target.Left + 2, target.Top + 2, _
+                                   target.Width - 4, target.Height - 4)
+        btn.Name = shapeId
+    End If
+
+    With btn
+        .Left = target.Left + 2
+        .Top = target.Top + 2
+        .Width = target.Width - 4
+        .Height = target.Height - 4
+        .Placement = xlMove
+        .PrintObject = False
+        .OnAction = "'" & Replace(ThisWorkbook.Name, "'", "''") & "'!MMF印刷_A4印刷"
+        .AlternativeText = "A4縦印刷（印刷ダイアログを開く）"
+        .Fill.ForeColor.RGB = RGB(31, 90, 130)
+        .Line.ForeColor.RGB = RGB(20, 63, 94)
+        .Line.Weight = 0.8
+        .TextFrame.Characters.Text = "A4印刷"
+        .TextFrame.HorizontalAlignment = xlHAlignCenter
+        .TextFrame.VerticalAlignment = xlVAlignCenter
+        With .TextFrame.Characters.Font
+            .Name = "Yu Gothic"
+            .Size = 12
+            .Bold = True
+            .Color = vbWhite
+        End With
+    End With
+End Sub
+
 ' O6で指定した1ページのみ印刷プレビューに表示する。
 ' 実印刷は行わないため、ページ構成を確認してから通常の印刷を実行する。
 Public Sub MMF印刷_指定頁プレビュー()
@@ -337,6 +442,9 @@ Private Function MMF印刷_更新本体(ByVal quiet As Boolean) As Boolean
             .RightFooter = "&D"
         End With
     End With
+
+    ' 印刷ビューの設定欄にもボタンを設置（A:L印刷範囲外）。
+    MMF印刷_ボタン更新 out, out.Range("N9:O10"), "MMF_A4PrintButtonView"
     out.Calculate
     success = True
     MMF印刷_更新本体 = True
