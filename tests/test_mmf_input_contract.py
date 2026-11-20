@@ -57,9 +57,9 @@ class MMFInputContractTests(unittest.TestCase):
         # still be rejected by the pre-existing K-column validation, not guessed.
         self.assertIn("既存の K 列", SOURCE)
         self.assertIn('CStr(ws.Range("B11").Value2) <> "取引区分"', SOURCE)
-        self.assertIn("買", SOURCE)
-        self.assertIn("売", SOURCE)
-        self.assertIn("累投", SOURCE)
+        self.assertIn("買付数量(C列)", SOURCE)
+        self.assertIn("売付数量(E列)", SOURCE)
+        self.assertIn("取引区分の文字列は計算に使用しません", SOURCE)
         self.assertNotIn("Worksheets(MMF_INPUT_SHEET).Calculate", SOURCE)
 
     def test_startup_and_manual_macros(self):
