@@ -126,7 +126,12 @@ class PrintContractTests(unittest.TestCase):
         self.assertIn('If btn Is Nothing Then', MODULE)
         self.assertIn('MMF印刷_ボタン更新 ledger, ledger.Range("I3:L4")', MODULE)
         self.assertIn('MMF印刷_ボタン更新 out, out.Range("N9:O10")', MODULE)
-        self.assertIn('.PrintObject = False', MODULE)
+        # Shape does not expose PrintObject. The button on the print view is
+        # already outside the A:L print range and does not need this property.
+        self.assertNotIn('.PrintObject = False', MODULE)
+        self.assertIn('MMF印刷_ボタン更新 out, out.Range("N9:O10")', MODULE)
+        self.assertIn('Err.Raise failureNumber, "MMF印刷_ボタン更新"', MODULE)
+        self.assertIn('Err.Description, vbExclamation, "外貨建MMF"', MODULE)
 
     def test_button_uses_print_dialog_only_after_refresh(self):
         button = MODULE.split('Public Sub MMF印刷_A4印刷()', 1)[1].split('End Sub', 1)[0]
