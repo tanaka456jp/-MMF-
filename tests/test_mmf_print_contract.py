@@ -118,6 +118,37 @@ class PrintContractTests(unittest.TestCase):
         self.assertIn('ws.PrintOut From:=CLng(d), To:=CLng(d), Preview:=True', MODULE)
         self.assertIn('out.Range("O6").Locked = False', MODULE)
 
+    def test_a4_print_button_is_created_at_workbook_open(self):
+        self.assertEqual(WORKBOOK.count("Call MMF印刷_ボタン設置"), 1)
+        self.assertIn('Public Sub MMF印刷_ボタン設置()', MODULE)
+        self.assertIn('Public Sub MMF印刷_A4印刷()', MODULE)
+        self.assertIn('Set btn = ws.Shapes(shapeId)', MODULE)
+        self.assertIn('If btn Is Nothing Then', MODULE)
+        self.assertIn('MMF印刷_ボタン更新 ledger, ledger.Range("I3:L4")', MODULE)
+        self.assertIn('MMF印刷_ボタン更新 out, out.Range("N9:O10")', MODULE)
+        self.assertIn('.PrintObject = False', MODULE)
+
+    def test_button_uses_print_dialog_only_after_refresh(self):
+        button = MODULE.split('Public Sub MMF印刷_A4印刷()', 1)[1].split('End Sub', 1)[0]
+        self.assertIn('MMF印刷_更新本体(True)', button)
+        self.assertIn('Application.Dialogs(xlDialogPrint).Show', button)
+        self.assertIn('If checkCount > 0 Then', button)
+        self.assertIn('vbYesNo + vbExclamation + vbDefaultButton2', button)
+        self.assertIn('printWs.Select Replace:=True', button)
+        self.assertLess(button.index('MMF印刷_更新本体(True)'),
+                        button.index('Application.Dialogs(xlDialogPrint).Show'))
+        self.assertIn(".OnAction = ", MODULE)
+        self.assertIn("'!MMF印刷_A4印刷", MODULE)
+
+    def test_button_location_does_not_overlap_ledger_labels(self):
+        target = ROOT / MANIFEST["target"]["directory"] / MANIFEST["target"]["file"]
+        with zipfile.ZipFile(target) as book:
+            filled = get_sheet_cells(book, "MMF取引台帳")
+        for row in (3, 4):
+            for col in "IJKL":
+                with self.subTest(cell=f"{col}{row}"):
+                    self.assertNotIn(f"{col}{row}", filled)
+
     def test_core_calculation_is_not_rewritten(self):
         self.assertIn('expr = MMF印刷_参照(sheetName, "T", sourceRow)', MODULE)
         self.assertIn('expr = MMF印刷_参照(sheetName, "U", sourceRow)', MODULE)
