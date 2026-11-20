@@ -220,6 +220,9 @@ Private Sub Workbook_Open()
     ' 入力内容ではなく数量に基づく取得費判定へ切替
     Call MMF数量判定_起動時設定
 
+    ' MMF取引台帳の上部に「A4印刷」ボタンを設置（既存なら更新のみ）
+    Call MMF印刷_ボタン設置
+
 End Sub
 
 Private Sub Workbook_BeforeClose(Cancel As Boolean)
