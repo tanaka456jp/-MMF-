@@ -66,6 +66,11 @@
             "type": "standard",
             "name": "ModuleMMFInput",
             "file": "standard/ModuleMMFInput.bas"
+        },
+        {
+            "type": "standard",
+            "name": "ModuleMMFCalc",
+            "file": "standard/ModuleMMFCalc.bas"
         }
     ],
     "compileGate": {
@@ -97,6 +102,10 @@
             {
                 "type": "standard",
                 "name": "ModuleMMFInput"
+            },
+            {
+                "type": "standard",
+                "name": "ModuleMMFCalc"
             }
         ]
     }
