@@ -398,24 +398,24 @@ Private Function MMF印刷_数式(ByVal sheetName As String, _
         Case 2
             expr = b
         Case 3
-            expr = "IF(" & b & "=" & q & "売" & q & ",IF(" & _
+            expr = "IF(" & MMF印刷_参照(sheetName, "E", sourceRow) & ">0" & ",IF(" & _
                    MMF印刷_参照(sheetName, "E", sourceRow) & "=" & q & q & "," & q & q & "," & _
                    MMF印刷_参照(sheetName, "E", sourceRow) & "),IF(" & _
                    MMF印刷_参照(sheetName, "C", sourceRow) & "=" & q & q & "," & q & q & "," & _
                    MMF印刷_参照(sheetName, "C", sourceRow) & "))"
         Case 4
-            expr = "IF(" & b & "=" & q & "売" & q & "," & _
+            expr = "IF(" & MMF印刷_参照(sheetName, "E", sourceRow) & ">0" & "," & _
                    MMF印刷_参照(sheetName, "O", sourceRow) & "," & _
                    MMF印刷_参照(sheetName, "M", sourceRow) & ")"
         Case 5
-            expr = "IF(" & b & "=" & q & "売" & q & "," & _
+            expr = "IF(" & MMF印刷_参照(sheetName, "E", sourceRow) & ">0" & "," & _
                    MMF印刷_参照(sheetName, "P", sourceRow) & "," & _
                    MMF印刷_参照(sheetName, "N", sourceRow) & ")"
         Case 6
-            expr = "IF(" & b & "=" & q & "売" & q & "," & _
+            expr = "IF(" & MMF印刷_参照(sheetName, "E", sourceRow) & ">0" & "," & _
                    MMF印刷_参照(sheetName, "R", sourceRow) & "," & q & q & ")"
         Case 7
-            expr = "IF(" & b & "=" & q & "売" & q & "," & _
+            expr = "IF(" & MMF印刷_参照(sheetName, "E", sourceRow) & ">0" & "," & _
                    MMF印刷_参照(sheetName, "S", sourceRow) & "," & q & q & ")"
         Case 8
             expr = MMF印刷_参照(sheetName, "T", sourceRow)
