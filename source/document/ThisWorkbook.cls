@@ -215,6 +215,9 @@ Private Sub Workbook_Open()
     '■■ スペースキー
     Call SetSpaceKey
 
+    '■■ MMF取引台帳の取引区分を自由入力に設定（元の計算式は変更しない）
+    Call MMF取引区分_起動時設定
+
 End Sub
 
 Private Sub Workbook_BeforeClose(Cancel As Boolean)
