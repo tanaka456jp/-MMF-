@@ -1,9 +1,10 @@
-name: MMF A4 Portrait VBA Contract
+name: MMF VBA Calculation and Print Contracts
 on:
   push:
     paths:
       - 'source/standard/ModuleMMFPrint.bas'
       - 'source/standard/ModuleMMFInput.bas'
+      - 'source/standard/ModuleMMFCalc.bas'
       - 'source/document/ThisWorkbook.cls'
       - 'project.json'
       - 'target/**'
@@ -13,6 +14,7 @@ on:
     paths:
       - 'source/standard/ModuleMMFPrint.bas'
       - 'source/standard/ModuleMMFInput.bas'
+      - 'source/standard/ModuleMMFCalc.bas'
       - 'source/document/ThisWorkbook.cls'
       - 'project.json'
       - 'target/**'
@@ -26,4 +28,4 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Validate workbook headers and VBAUpdater mapping
-        run: python -m unittest discover -s tests -p 'test_mmf_*contract.py' -v
+        run: python -m unittest discover -s tests -p 'test_mmf_*.py' -v
