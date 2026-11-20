@@ -3,6 +3,7 @@ on:
   push:
     paths:
       - 'source/standard/ModuleMMFPrint.bas'
+      - 'source/standard/ModuleMMFInput.bas'
       - 'source/document/ThisWorkbook.cls'
       - 'project.json'
       - 'target/**'
@@ -11,6 +12,7 @@ on:
   pull_request:
     paths:
       - 'source/standard/ModuleMMFPrint.bas'
+      - 'source/standard/ModuleMMFInput.bas'
       - 'source/document/ThisWorkbook.cls'
       - 'project.json'
       - 'target/**'
@@ -24,4 +26,4 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Validate workbook headers and VBAUpdater mapping
-        run: python -m unittest discover -s tests -p 'test_mmf_print_contract.py' -v
+        run: python -m unittest discover -s tests -p 'test_mmf_*contract.py' -v
