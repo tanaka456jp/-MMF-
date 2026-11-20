@@ -215,7 +215,7 @@ Private Sub Workbook_Open()
     '■■ スペースキー
     Call SetSpaceKey
 
-    '■■ MMF取引台帳の取引区分を自由入力に設定（元の計算式は変更しない）
+    '■■ MMF取引台帳の取引区分B列の選択制限を解除
     Call MMF取引区分_起動時設定
     ' 入力内容ではなく数量に基づく取得費判定へ切替
     Call MMF数量判定_起動時設定
