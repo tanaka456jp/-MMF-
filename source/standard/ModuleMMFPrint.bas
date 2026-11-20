@@ -90,6 +90,7 @@ Public Sub MMF印刷_ボタン設置()
 
 SetupFailed:
     MsgBox "A4印刷ボタンを配置できませんでした。" & vbCrLf & _
+           "エラー番号：" & CStr(Err.Number) & vbCrLf & _
            Err.Description, vbExclamation, "外貨建MMF"
 End Sub
 
@@ -97,11 +98,18 @@ End Sub
 Private Sub MMF印刷_ボタン更新(ByVal ws As Worksheet, ByVal target As Range, _
                               ByVal shapeId As String)
     Dim btn As Shape
+    Dim stepName As String
+    Dim failureNumber As Long, failureDetail As String
 
+    ' Excel環境によるオブジェクトモデルの違いを診断できるよう、
+    ' 操作段階をエラーメッセージに残す。
+    stepName = "既存ボタンの検索"
     On Error Resume Next
     Set btn = ws.Shapes(shapeId)
-    On Error GoTo 0
+    Err.Clear
+    On Error GoTo ButtonFailed
 
+    stepName = "図形の作成"
     If btn Is Nothing Then
         Set btn = ws.Shapes.AddShape(msoShapeRoundedRectangle, _
                                    target.Left + 2, target.Top + 2, _
@@ -109,13 +117,15 @@ Private Sub MMF印刷_ボタン更新(ByVal ws As Worksheet, ByVal target As Ran
         btn.Name = shapeId
     End If
 
+    stepName = "図形の位置・クリック操作・書式の設定"
     With btn
         .Left = target.Left + 2
         .Top = target.Top + 2
         .Width = target.Width - 4
         .Height = target.Height - 4
         .Placement = xlMove
-        .PrintObject = False
+        ' Excel.Shape に PrintObject プロパティは存在しない。
+        ' 既存の設定欄 N:O は印刷範囲 A:L の外なので、図形は印刷されない。
         .OnAction = "'" & Replace(ThisWorkbook.Name, "'", "''") & "'!MMF印刷_A4印刷"
         .AlternativeText = "A4縦印刷（印刷ダイアログを開く）"
         .Fill.ForeColor.RGB = RGB(31, 90, 130)
@@ -131,6 +141,13 @@ Private Sub MMF印刷_ボタン更新(ByVal ws As Worksheet, ByVal target As Ran
             .Color = vbWhite
         End With
     End With
+    Exit Sub
+
+ButtonFailed:
+    failureNumber = Err.Number
+    failureDetail = Err.Description
+    Err.Raise failureNumber, "MMF印刷_ボタン更新", _
+              "シート「" & ws.Name & "」／" & stepName & "：" & failureDetail
 End Sub
 
 ' O6で指定した1ページのみ印刷プレビューに表示する。
