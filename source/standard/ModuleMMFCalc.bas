@@ -13,6 +13,8 @@ Private mApplying As Boolean
 
 ' VBAUpdater反映後にブックを閉じずに適用したい場合に使用する。
 Public Sub MMF数量判定_適用()
+    ' 手動実行時も取引区分B列の入力規則を解除する。
+    Call MMF取引区分_起動時設定
     If MMF数量判定_変更本体() Then
         MsgBox "取引区分と計算区分を分離しました。" & vbCrLf & _
                "買付数量(C列)>0は買付、売付数量(E列)>0は売付として計算します。" & vbCrLf & _
