@@ -47,13 +47,20 @@ Public Function MMF為替_取得(ByVal tradeDate As Variant, ByVal rateType As V
     If sourceCol = 0 Then GoTo MissingValue
 
     lastRow = fx.Cells(fx.Rows.Count, 1).End(xlUp).Row
-    For rowNo = 5 To lastRow
-        cellValue = fx.Cells(rowNo, 1).Value2
+    If lastRow < 5 Then GoTo MissingValue
+    ' Excelとの往復アクセスを避け、通貨列と日付列を一括読み込みする。
+    ' 大量の明細行での数式再計算を高速化する。
+    Dim datesData As Variant, ratesData As Variant
+    datesData = fx.Range("A5:A" & lastRow).Value2
+    ratesData = fx.Range(fx.Cells(5, sourceCol), fx.Cells(lastRow, sourceCol)).Value2
+
+    For rowNo = 1 To UBound(datesData, 1)
+        cellValue = datesData(rowNo, 1)
         If Not IsError(cellValue) Then
             If IsDate(cellValue) Then
                 sourceDay = CLng(Int(CDbl(CDate(cellValue))))
                 If sourceDay = targetDay Then
-                    rawRate = fx.Cells(rowNo, sourceCol).Value2
+                    rawRate = ratesData(rowNo, 1)
                     If IsError(rawRate) Then GoTo InvalidInput
                     If Not IsNumeric(rawRate) Then GoTo InvalidInput
                     If CDbl(rawRate) <= 0 Then GoTo InvalidInput
