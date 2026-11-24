@@ -11,7 +11,7 @@ Private Const BASE_LAST_ROW As Long = 511
 Private mFXInstalling As Boolean
 
 Public Function MMF為替_取得(ByVal tradeDate As Variant, ByVal rateType As Variant, _
-                              ByVal currency As Variant) As Variant
+                              ByVal currencyLabel As Variant) As Variant
     Dim fx As Worksheet
     Dim targetCode As String, headCode As String
     Dim sourceCol As Long, lastCol As Long, lastRow As Long
@@ -22,10 +22,10 @@ Public Function MMF為替_取得(ByVal tradeDate As Variant, ByVal rateType As V
 
     On Error GoTo InvalidInput
 
-    If IsError(tradeDate) Or IsError(rateType) Or IsError(currency) Then GoTo InvalidInput
+    If IsError(tradeDate) Or IsError(rateType) Or IsError(currencyLabel) Then GoTo InvalidInput
     If Not IsDate(tradeDate) Then GoTo InvalidInput
     targetDay = CLng(Int(CDbl(CDate(tradeDate))))
-    targetCode = MMF為替_通貨コード(CStr(currency))
+    targetCode = MMF為替_通貨コード(CStr(currencyLabel))
     If targetCode = "" Then GoTo MissingValue
 
     Select Case UCase$(Trim$(CStr(rateType)))
