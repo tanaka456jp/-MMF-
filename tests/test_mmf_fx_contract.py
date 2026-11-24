@@ -45,6 +45,16 @@ class FXContractTests(unittest.TestCase):
         self.assertIn("MATCH($F$3,為替データ!$C$3:$CL$3,0)", y12)
         self.assertIn("FX取得(A12,H12,$F$3)", self.legacy["L12"])
 
+    def test_fx_udf_arguments_do_not_use_vba_reserved_identifiers(self):
+        # Currency is a VBA built-in type/reserved identifier. Using
+        # 'ByVal currency As Variant' causes 'Expected: identifier' in VBE.
+        import re
+        self.assertRegex(CODE, r"ByVal\s+currencyLabel\s+As\s+Variant")
+        self.assertIn("IsError(currencyLabel)", CODE)
+        self.assertIn("CStr(currencyLabel)", CODE)
+        self.assertNotRegex(CODE, r"(?i)\bByVal\s+Currency\s+As\b")
+        self.assertNotRegex(CODE, r"(?i)\bByRef\s+Currency\s+As\b")
+
     def test_currency_code_normalized_and_merged_3_column_headers(self):
         self.assertIn('Replace(textLabel, "（", "(")', CODE)
         self.assertIn('Replace(textLabel, "）", ")")', CODE)
