@@ -18,13 +18,13 @@ Public Function MMF為替_取得(ByVal tradeDate As Variant, ByVal rateType As V
     Dim col As Long, rowNo As Long, rateOffset As Long
     Dim targetDay As Long, sourceDay As Long
     Dim cellValue As Variant, rawRate As Variant
+    Dim datesData As Variant, ratesData As Variant
     Dim found As Boolean, foundRate As Double
 
     On Error GoTo InvalidInput
 
     If IsError(tradeDate) Or IsError(rateType) Or IsError(currencyLabel) Then GoTo InvalidInput
-    If Not IsDate(tradeDate) Then GoTo InvalidInput
-    targetDay = CLng(Int(CDbl(CDate(tradeDate))))
+    If Not MMF為替_日付シリアル(tradeDate, targetDay) Then GoTo InvalidInput
     targetCode = MMF為替_通貨コード(CStr(currencyLabel))
     If targetCode = "" Then GoTo MissingValue
 
@@ -50,15 +50,19 @@ Public Function MMF為替_取得(ByVal tradeDate As Variant, ByVal rateType As V
     If lastRow < 5 Then GoTo MissingValue
     ' Excelとの往復アクセスを避け、通貨列と日付列を一括読み込みする。
     ' 大量の明細行での数式再計算を高速化する。
-    Dim datesData As Variant, ratesData As Variant
-    datesData = fx.Range("A5:A" & lastRow).Value2
-    ratesData = fx.Range(fx.Cells(5, sourceCol), fx.Cells(lastRow, sourceCol)).Value2
+    If lastRow = 5 Then
+        ReDim datesData(1 To 1, 1 To 1)
+        ReDim ratesData(1 To 1, 1 To 1)
+        datesData(1, 1) = fx.Cells(5, 1).Value2
+        ratesData(1, 1) = fx.Cells(5, sourceCol).Value2
+    Else
+        datesData = fx.Range("A5:A" & lastRow).Value2
+        ratesData = fx.Range(fx.Cells(5, sourceCol), fx.Cells(lastRow, sourceCol)).Value2
+    End If
 
     For rowNo = 1 To UBound(datesData, 1)
         cellValue = datesData(rowNo, 1)
-        If Not IsError(cellValue) Then
-            If IsDate(cellValue) Then
-                sourceDay = CLng(Int(CDbl(CDate(cellValue))))
+        If MMF為替_日付シリアル(cellValue, sourceDay) Then
                 If sourceDay = targetDay Then
                     rawRate = ratesData(rowNo, 1)
                     If IsError(rawRate) Then GoTo InvalidInput
@@ -73,7 +77,6 @@ Public Function MMF為替_取得(ByVal tradeDate As Variant, ByVal rateType As V
                         foundRate = CDbl(rawRate)
                     End If
                 End If
-            End If
         End If
     Next rowNo
 
@@ -92,6 +95,39 @@ AmbiguousRate:
 
 InvalidInput:
     MMF為替_取得 = CVErr(xlErrValue)
+End Function
+
+
+' Range.Value2 ではExcel日付は Double のシリアル値で渡される。
+' IsDate(Double) の結果に依存せず、日付型・数値・日付文字列を統一する。
+' 1904日付システムの場合はExcelシリアル値をVBA側に補正する。
+Private Function MMF為替_日付シリアル(ByVal cellDate As Variant, ByRef dayNumber As Long) As Boolean
+    Dim numericDay As Double
+    On Error GoTo NotDate
+
+    If IsError(cellDate) Or IsNull(cellDate) Or IsEmpty(cellDate) Then Exit Function
+
+    If VarType(cellDate) = vbString Then
+        If Len(Trim$(CStr(cellDate))) = 0 Then Exit Function
+        If Not IsDate(cellDate) Then Exit Function
+        numericDay = CDbl(CDate(cellDate))
+    ElseIf VarType(cellDate) = vbDate Then
+        numericDay = CDbl(cellDate)
+    ElseIf IsNumeric(cellDate) Then
+        numericDay = CDbl(cellDate)
+        If ThisWorkbook.Date1904 Then numericDay = numericDay + 1462#
+    Else
+        Exit Function
+    End If
+
+    ' Excelの1900日付システムで1900年3月1日以降の有効日付だけを受理。
+    If numericDay < 61# Or numericDay >= 2958466# Then Exit Function
+    dayNumber = CLng(Fix(numericDay))
+    MMF為替_日付シリアル = True
+    Exit Function
+
+NotDate:
+    MMF為替_日付シリアル = False
 End Function
 
 Private Function MMF為替_通貨コード(ByVal rawLabel As String) As String
@@ -244,11 +280,12 @@ Public Sub MMF為替_初回取引診断()
     dayValue = ledger.Range("A12").Value2
     typeValue = CStr(ledger.Range("H12").Value2)
     ccy = MMF為替_通貨コード(CStr(ledger.Range("F3").Value2))
-    If Not IsDate(dayValue) Then
-        MsgBox "A12が正しい日付として認識されていません。", vbExclamation
+    If Not MMF為替_日付シリアル(dayValue, targetDay) Then
+        MsgBox "A12を日付に変換できませんでした。" & vbCrLf & _
+               "セル値の型：" & TypeName(dayValue) & vbCrLf & _
+               "入力値：" & CStr(ledger.Range("A12").Text), vbExclamation
         Exit Sub
     End If
-    targetDay = CLng(Int(CDbl(CDate(dayValue))))
     lastCol = fx.Cells(3, fx.Columns.Count).End(xlToLeft).Column
     lastRow = fx.Cells(fx.Rows.Count, 1).End(xlUp).Row
     For col = 3 To lastCol Step 3
@@ -259,15 +296,13 @@ Public Sub MMF為替_初回取引診断()
     Next col
     For n = 5 To lastRow
         cellValue = fx.Cells(n, 1).Value2
-        If Not IsError(cellValue) Then
-            If IsDate(cellValue) Then
-                sourceDay = CLng(Int(CDbl(CDate(cellValue))))
-                If targetDay = sourceDay Then dateMatches = dateMatches + 1
-            End If
+        If MMF為替_日付シリアル(cellValue, sourceDay) Then
+            If targetDay = sourceDay Then dateMatches = dateMatches + 1
         End If
     Next n
     result = MMF為替_取得(dayValue, typeValue, ledger.Range("F3").Value2)
-    msg = "取引日：" & Format$(CDate(dayValue), "yyyy/m/d") & vbCrLf & _
+    msg = "取引日：" & Format$(CDate(targetDay), "yyyy/m/d") & vbCrLf & _
+          "入力値の型：" & TypeName(dayValue) & vbCrLf & _
           "為替区分：" & typeValue & vbCrLf & "通貨コード：" & ccy & vbCrLf & _
           "為替ヘッダー列：" & CStr(headerMatch) & vbCrLf & _
           "取引日のデータ行数：" & CStr(dateMatches) & vbCrLf
