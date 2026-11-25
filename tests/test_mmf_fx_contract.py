@@ -55,6 +55,29 @@ class FXContractTests(unittest.TestCase):
         self.assertNotRegex(CODE, r"(?i)\bByVal\s+Currency\s+As\b")
         self.assertNotRegex(CODE, r"(?i)\bByRef\s+Currency\s+As\b")
 
+    def test_excel_value2_date_serials_are_accepted(self):
+        # Excel Range.Value2 returns a Double for a date formatted cell;
+        # direct IsDate(value2) is not a reliable numeric-date validator.
+        import datetime
+        excel_serial = (datetime.date(2020, 5, 15) -
+                        datetime.date(1899, 12, 30)).days
+        self.assertEqual(43966, excel_serial)
+        self.assertIn('Private Function MMF為替_日付シリアル(', CODE)
+        self.assertIn('ElseIf IsNumeric(cellDate) Then', CODE)
+        self.assertIn('numericDay = CDbl(cellDate)', CODE)
+        self.assertIn('If ThisWorkbook.Date1904 Then numericDay = numericDay + 1462#', CODE)
+        self.assertIn('dayNumber = CLng(Fix(numericDay))', CODE)
+        self.assertIn('If Not MMF為替_日付シリアル(tradeDate, targetDay)', CODE)
+        self.assertIn('If MMF為替_日付シリアル(cellValue, sourceDay)', CODE)
+        self.assertIn('If Not MMF為替_日付シリアル(dayValue, targetDay)', CODE)
+        self.assertNotIn('If Not IsDate(tradeDate)', CODE)
+        self.assertNotIn('If Not IsDate(dayValue)', CODE)
+
+    def test_fx_date_single_row_array_shape(self):
+        self.assertIn('If lastRow = 5 Then', CODE)
+        self.assertIn('ReDim datesData(1 To 1, 1 To 1)', CODE)
+        self.assertIn('ReDim ratesData(1 To 1, 1 To 1)', CODE)
+
     def test_currency_code_normalized_and_merged_3_column_headers(self):
         self.assertIn('Replace(textLabel, "（", "(")', CODE)
         self.assertIn('Replace(textLabel, "）", ")")', CODE)
