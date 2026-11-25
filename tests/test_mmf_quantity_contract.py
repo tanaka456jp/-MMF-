@@ -1,7 +1,7 @@
 """Regressions for quantity-based MMF trade classification.
 
-The repository keeps the XLSM binary unchanged: VBAUpdater brings in
-ModuleMMFCalc, and Excel executes the guarded formula migration at startup.
+VBAUpdater imports ModuleMMFCalc. Excel may save repeated worksheet formulas
+as shared OOXML formulas, so tests reconstruct followers before validating.
 """
 import json
 import re
@@ -21,6 +21,46 @@ NS = {
 }
 
 
+
+def _addr_parts(address):
+    match = re.fullmatch(r"([A-Z]{1,3})([1-9]\d*)", address)
+    if match is None:
+        raise ValueError(f"Unexpected spreadsheet address: {address}")
+    col, row = match.groups()
+    col_num = 0
+    for char in col:
+        col_num = col_num * 26 + ord(char) - ord("A") + 1
+    return col_num, int(row)
+
+
+def _column_label(col_num):
+    result = ""
+    while col_num:
+        col_num, remainder = divmod(col_num - 1, 26)
+        result = chr(65 + remainder) + result
+    return result
+
+
+def _translate_shared_formula(formula, origin, dest):
+    """Reconstruct a follower of an OOXML shared formula without extra libraries."""
+    from_col, from_row = _addr_parts(origin)
+    to_col, to_row = _addr_parts(dest)
+    delta_col = to_col - from_col
+    delta_row = to_row - from_row
+
+    def translate(match):
+        absolute_col, col, absolute_row, row = match.groups()
+        col_value, _ = _addr_parts(col + "1")
+        new_col = col_value if absolute_col else col_value + delta_col
+        new_row = int(row) if absolute_row else int(row) + delta_row
+        if new_col <= 0 or new_row <= 0:
+            raise ValueError(f"Invalid translated reference from {origin} to {dest}")
+        return f"{absolute_col}{_column_label(new_col)}{absolute_row}{new_row}"
+
+    return re.sub(r"(?<![A-Za-z0-9_])(\$?)([A-Z]{1,3})(\$?)(\d+)",
+                  translate, formula)
+
+
 def source_formulas():
     path = ROOT / CONFIG["target"]["directory"] / CONFIG["target"]["file"]
     with zipfile.ZipFile(path) as z:
@@ -33,11 +73,29 @@ def source_formulas():
         if not source.startswith("xl/"):
             source = "xl/" + source
         xml = ET.fromstring(z.read(source))
-    return {
-        cell.get("r"): cell.find("m:f", NS).text
-        for cell in xml.findall(".//m:sheetData/m:row/m:c", NS)
-        if cell.find("m:f", NS) is not None
-    }
+
+    raw_formulas = {}
+    shared_masters = {}
+    for cell in xml.findall(".//m:sheetData/m:row/m:c", NS):
+        elem = cell.find("m:f", NS)
+        if elem is None:
+            continue
+        address = cell.get("r")
+        raw_formulas[address] = (elem.get("t"), elem.get("si"), elem.text)
+        if elem.get("t") == "shared" and elem.text:
+            shared_masters[elem.get("si")] = (address, elem.text)
+
+    expanded = {}
+    for address, (kind, si, formula) in raw_formulas.items():
+        if kind == "shared" and not formula:
+            if si not in shared_masters:
+                raise ValueError(f"Shared formula {address} has no master (si={si})")
+            origin, original_formula = shared_masters[si]
+            expanded[address] = _translate_shared_formula(original_formula, origin, address)
+        else:
+            expanded[address] = formula
+    return expanded, sum(1 for kind, si, formula in raw_formulas.values()
+                         if kind == "shared" and not formula)
 
 
 def migrate_formula(f, r, column):
@@ -58,7 +116,16 @@ def migrate_formula(f, r, column):
 class MMFQuantityTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.formulas = source_formulas()
+        cls.formulas, cls.shared_followers = source_formulas()
+
+    def test_shared_formula_followers_from_excel_save_are_expanded(self):
+        # Opening/saving XLSM in Excel may store <f t="shared" si="..."/>
+        # for repeated rows rather than repeating each formula in its XML.
+        self.assertIsInstance(self.shared_followers, int)
+        self.assertGreaterEqual(self.shared_followers, 0)
+        self.assertIsInstance(self.formulas["K13"], str)
+        self.assertTrue(self.formulas["K13"].startswith("=") is False)
+        self.assertIn("13", self.formulas["K13"])
 
     def test_existing_workbook_has_all_formula_columns(self):
         for r in (12, 13, 100, 511):
