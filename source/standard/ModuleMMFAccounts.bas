@@ -174,7 +174,7 @@ Public Sub MMF口座_別ブックから取込()
     Dim oldEvents As Boolean, oldScreen As Boolean, oldSecurity As Long
     Dim sourceLast As Long, lastTarget As Long
     Dim originalInput As Variant, originalStart As Variant
-    Dim dataWritten As Boolean, errorText As String
+    Dim dataWritten As Boolean, errorText As String, appStateSaved As Boolean
 
     On Error GoTo Failed
     If MMF口座_シート取得(GENERAL_LEDGER) Is Nothing Or _
@@ -201,6 +201,12 @@ Public Sub MMF口座_別ブックから取込()
         Err.Raise vbObjectError + 843, , _
                   targetName & "のシート保護を解除してください。"
     End If
+    If Val(CStr(targetWs.Range("B4").Value2)) <> 0 Or _
+       Val(CStr(targetWs.Range("D4").Value2)) <> 0 Or _
+       Val(CStr(targetWs.Range("F4").Value2)) <> 0 Then
+        Err.Raise vbObjectError + 849, , _
+                  targetName & "に期首残高があります。上書きせず中止しました。"
+    End If
 
     Set chooser = Application.FileDialog(3)
     chooser.AllowMultiSelect = False
@@ -216,6 +222,7 @@ Public Sub MMF口座_別ブックから取込()
     oldEvents = Application.EnableEvents
     oldScreen = Application.ScreenUpdating
     oldSecurity = Application.AutomationSecurity
+    appStateSaved = True
     Application.EnableEvents = False
     Application.ScreenUpdating = False
     Application.AutomationSecurity = 3   ' msoAutomationSecurityForceDisable
@@ -268,9 +275,11 @@ Public Sub MMF口座_別ブックから取込()
 CleanUp:
     On Error Resume Next
     If Not sourceBook Is Nothing Then sourceBook.Close SaveChanges:=False
-    Application.AutomationSecurity = oldSecurity
-    Application.EnableEvents = oldEvents
-    Application.ScreenUpdating = oldScreen
+    If appStateSaved Then
+        Application.AutomationSecurity = oldSecurity
+        Application.EnableEvents = oldEvents
+        Application.ScreenUpdating = oldScreen
+    End If
     On Error GoTo 0
     Exit Sub
 
