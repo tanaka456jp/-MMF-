@@ -40,6 +40,21 @@ Public Sub MMF印刷_A4印刷()
         If TypeName(ActiveSheet) = "Worksheet" Then Set returnWs = ActiveSheet
     End If
 
+    ' 口座別台帳のボタンから押した場合は、クリック元の口座を印刷する。
+    ' 旧「MMF取引台帳」や印刷ビューからの操作は従来の選択設定を維持。
+    If Not returnWs Is Nothing Then
+        If returnWs.Name = "一般口座" Or returnWs.Name = "特定口座" Then
+            On Error Resume Next
+            Set printWs = ThisWorkbook.Worksheets(PRINT_SHEET)
+            On Error GoTo PrintFailed
+            If printWs Is Nothing Then
+                Set printWs = ThisWorkbook.Worksheets.Add(After:=returnWs)
+                printWs.Name = PRINT_SHEET
+            End If
+            printWs.Range("O2").Value2 = returnWs.Name
+        End If
+    End If
+
     If Not MMF印刷_更新本体(True) Then GoTo CleanExit
     Set printWs = ThisWorkbook.Worksheets(PRINT_SHEET)
     checkCount = CLng(Val(CStr(printWs.Range("O4").Value2)))
@@ -73,10 +88,24 @@ End Sub
 Public Sub MMF印刷_ボタン設置()
     Dim ledger As Worksheet
     Dim output As Worksheet
+    Dim nameValue As Variant
 
     On Error GoTo SetupFailed
     Set ledger = ThisWorkbook.Worksheets(DEFAULT_SOURCE)
     MMF印刷_ボタン更新 ledger, ledger.Range("I3:L4"), "MMF_A4PrintButtonLedger"
+
+    For Each nameValue In Array("一般口座", "特定口座")
+        On Error Resume Next
+        Set ledger = ThisWorkbook.Worksheets(CStr(nameValue))
+        On Error GoTo SetupFailed
+        If Not ledger Is Nothing Then
+            If Not ledger.ProtectContents Then
+                MMF印刷_ボタン更新 ledger, ledger.Range("I3:L4"), _
+                                  "MMF_A4PrintButtonLedger"
+            End If
+        End If
+        Set ledger = Nothing
+    Next nameValue
 
     On Error Resume Next
     Set output = ThisWorkbook.Worksheets(PRINT_SHEET)
