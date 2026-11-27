@@ -173,6 +173,13 @@ CleanExit:
     If success Then
         ' まとめ表の更新は任意。異常な別口座の取引があっても行編集を巻き戻さない。
         Call MMF口座_まとめ更新(True)
+        ' まとめ表の再集計後も操作元の台帳に戻す。
+        ws.Activate
+        If addMode Then
+            ws.Cells(selectedRows(n) + 1, 1).Select
+        Else
+            ws.Cells(selectedRows(n), 1).Select
+        End If
         MsgBox "安全な行" & actionName & "を実行しました。" & vbCrLf & _
                "入力データと移動平均取得費を再計算しました。", vbInformation, "外貨建MMF"
     End If
@@ -399,3 +406,197 @@ Private Function MMF台帳_ひな形有効(ByVal ws As Worksheet) As Boolean
     MMF台帳_ひな形有効 = True
 Invalid:
 End Function
+
+
+' 操作バー: 既存の見出し(10～11行)・入力(12行以降)は変更しない。
+' 9行目の空欄を使い、従来のI3:L4のA4印刷ボタンは維持する。
+Public Sub MMF操作_ボタン設置()
+    Dim ws As Worksheet
+    Dim problem As String, detail As String
+    For Each ws In ThisWorkbook.Worksheets
+        If MMF台帳_対象(ws) And ws.Visible = xlSheetVisible Then
+            detail = MMF操作_台帳バー(ws)
+            If Len(detail) > 0 Then problem = problem & vbCrLf & ws.Name & "：" & detail
+        End If
+    Next ws
+    If Len(problem) > 0 Then
+        MsgBox "一部の操作ボタンを配置できませんでした。" & problem, _
+               vbExclamation, "外貨建MMF"
+    End If
+End Sub
+
+Private Function MMF操作_台帳バー(ByVal ws As Worksheet) As String
+    Dim wasProtected As Boolean, didUnprotect As Boolean
+    Dim drawProtected As Boolean, contentsProtected As Boolean, scenarioProtected As Boolean
+    Dim allowFmtCells As Boolean, allowFmtCols As Boolean, allowFmtRows As Boolean
+    Dim allowInsCols As Boolean, allowInsRows As Boolean, allowLinks As Boolean
+    Dim allowDelCols As Boolean, allowDelRows As Boolean
+    Dim allowSort As Boolean, allowFilter As Boolean, allowPivot As Boolean
+    Dim selectionMode As XlEnableSelection, messageText As String
+    On Error GoTo Failed
+
+    ' 9行目に独自の情報がある場合は上書きや重ね表示をしない。
+    If Application.CountA(ws.Range("A9:L9")) > 0 Then
+        MMF操作_台帳バー = "9行目に既存データがあるため配置を中止しました。"
+        Exit Function
+    End If
+    If CStr(ws.Range("C11").Value2) <> "買付数量" Or _
+       CStr(ws.Range("K11").Value2) <> "入力判定" Then
+        MMF操作_台帳バー = "台帳の見出しが想定と異なります。"
+        Exit Function
+    End If
+
+    drawProtected = ws.ProtectDrawingObjects
+    contentsProtected = ws.ProtectContents
+    scenarioProtected = ws.ProtectScenarios
+    wasProtected = drawProtected Or contentsProtected Or scenarioProtected
+    If wasProtected Then
+        selectionMode = ws.EnableSelection
+        With ws.Protection
+            allowFmtCells = .AllowFormattingCells
+            allowFmtCols = .AllowFormattingColumns
+            allowFmtRows = .AllowFormattingRows
+            allowInsCols = .AllowInsertingColumns
+            allowInsRows = .AllowInsertingRows
+            allowLinks = .AllowInsertingHyperlinks
+            allowDelCols = .AllowDeletingColumns
+            allowDelRows = .AllowDeletingRows
+            allowSort = .AllowSorting
+            allowFilter = .AllowFiltering
+            allowPivot = .AllowUsingPivotTables
+        End With
+        ws.Unprotect Password:=MMF_PASS
+        didUnprotect = True
+    End If
+
+    If ws.Rows(9).RowHeight < 30 Then ws.Rows(9).RowHeight = 30
+    MMF操作_図形 ws, ws.Range("A9:B9"), "MMF_UI_Delete", _
+        "行削除 [F7]", "MMF操作_行削除", RGB(155, 64, 51)
+    MMF操作_図形 ws, ws.Range("C9:D9"), "MMF_UI_Add", _
+        "行追加 [F8]", "MMF操作_行追加", RGB(31, 90, 130)
+    MMF操作_図形 ws, ws.Range("E9:F9"), "MMF_UI_Repair", _
+        "計算式修復", "MMF台帳_計算式修復", RGB(31, 90, 130)
+    MMF操作_図形 ws, ws.Range("G9:H9"), "MMF_UI_Summary", _
+        "まとめ表更新", "MMF口座_まとめ表更新", RGB(24, 113, 103)
+    If ws.Name = "MMF取引台帳" Then
+        MMF操作_図形 ws, ws.Range("I9:J9"), "MMF_UI_Import", _
+            "2口座作成", "MMF操作_口座作成", RGB(31, 90, 130)
+    Else
+        MMF操作_図形 ws, ws.Range("I9:J9"), "MMF_UI_Import", _
+            "別ブック取込", "MMF口座_別ブックから取込", RGB(31, 90, 130)
+    End If
+    MMF操作_図形 ws, ws.Range("K9:L9"), "MMF_UI_Help", _
+        "操作ガイド", "MMF操作_ガイド", RGB(75, 88, 102)
+
+CleanExit:
+    If didUnprotect Then
+        On Error Resume Next
+        Err.Clear
+        ws.Protect Password:=MMF_PASS, DrawingObjects:=drawProtected, _
+            Contents:=contentsProtected, Scenarios:=scenarioProtected, _
+            UserInterfaceOnly:=True, AllowFormattingCells:=allowFmtCells, _
+            AllowFormattingColumns:=allowFmtCols, AllowFormattingRows:=allowFmtRows, _
+            AllowInsertingColumns:=allowInsCols, AllowInsertingRows:=allowInsRows, _
+            AllowInsertingHyperlinks:=allowLinks, AllowDeletingColumns:=allowDelCols, _
+            AllowDeletingRows:=allowDelRows, AllowSorting:=allowSort, _
+            AllowFiltering:=allowFilter, AllowUsingPivotTables:=allowPivot
+        If Err.Number <> 0 Then
+            messageText = messageText & "／シート保護の復元失敗：" & Err.Description
+        Else
+            ws.EnableSelection = selectionMode
+        End If
+        On Error GoTo 0
+    End If
+    MMF操作_台帳バー = messageText
+    Exit Function
+Failed:
+    messageText = Err.Description
+    Resume CleanExit
+End Function
+
+' 取引行の選択が失われた場合は誤って別の行を操作しない。
+Public Sub MMF操作_行削除()
+    If Not MMF操作_選択確認() Then Exit Sub
+    Call MMF台帳_選択行削除
+End Sub
+
+Public Sub MMF操作_行追加()
+    If Not MMF操作_選択確認() Then Exit Sub
+    Call MMF台帳_選択行追加
+End Sub
+
+Private Function MMF操作_選択確認() As Boolean
+    If TypeName(ActiveSheet) <> "Worksheet" Then Exit Function
+    If Not MMF台帳_対象(ActiveSheet) Then Exit Function
+    If TypeName(Selection) = "Range" Then
+        If Selection.Row >= MMF_FIRST Then
+            MMF操作_選択確認 = True
+            Exit Function
+        End If
+    End If
+    MsgBox "先に12行目以降の取引セルを選択してください。" & vbCrLf & _
+           "行削除はF7、行追加はF8でも実行できます。", vbInformation, "外貨建MMF"
+End Function
+
+Public Sub MMF操作_口座作成()
+    Call MMF口座_2口座シート作成
+    Call MMF印刷_ボタン設置
+    Call MMF操作_ボタン設置
+End Sub
+
+Public Sub MMF操作_ガイド()
+    MsgBox "【操作例】" & vbCrLf & _
+           "行削除：対象行のセルを選択 → 行削除 [F7] → 確認" & vbCrLf & _
+           "行追加：挿入したい位置の直前の行を選択 → 行追加 [F8]" & vbCrLf & _
+           "複数行：Ctrlキーで離れた行も選択できます。" & vbCrLf & _
+           "計算式修復：対象口座を開いてボタンを押す（入力値は保持）。" & vbCrLf & _
+           "まとめ表更新：両口座を集計し、まとめ表を表示。" & vbCrLf & _
+           "別ブック取込：空の口座へ既存ファイルを取り込む。" & vbCrLf & _
+           "A4印刷：現在の口座の取引明細を印刷。" & vbCrLf & _
+           "まとめ表ではA4まとめ印刷を使用してください。" & vbCrLf & _
+           "※標準の行削除ではなくF7または行削除ボタンを推奨。", _
+           vbInformation, "外貨建MMF 操作ガイド"
+End Sub
+
+' 印刷シートの設定欄に既存マクロを直接呼び出すボタンを配置。
+' A:Lの印刷範囲に重ならない。印刷再作成時にも呼び出される。
+Public Sub MMF操作_印刷補助設置(ByVal ws As Worksheet)
+    MMF操作_図形 ws, ws.Range("N11:O12"), "MMF_UI_PrintRefresh", _
+        "印刷明細更新", "MMF印刷_1段表示へ更新", RGB(31, 90, 130)
+    MMF操作_図形 ws, ws.Range("N13:O14"), "MMF_UI_PrintPreview", _
+        "指定ページプレビュー", "MMF印刷_指定頁プレビュー", RGB(31, 90, 130)
+End Sub
+
+Private Sub MMF操作_図形(ByVal ws As Worksheet, ByVal place As Range, _
+                         ByVal shapeId As String, ByVal buttonText As String, _
+                         ByVal macroName As String, ByVal fillColor As Long)
+    Dim btn As Shape
+    On Error Resume Next
+    Set btn = ws.Shapes(shapeId)
+    On Error GoTo 0
+    If btn Is Nothing Then
+        Set btn = ws.Shapes.AddShape(msoShapeRoundedRectangle, _
+            place.Left + 2, place.Top + 2, place.Width - 4, place.Height - 4)
+        btn.Name = shapeId
+    End If
+    With btn
+        .Left = place.Left + 2
+        .Top = place.Top + 2
+        .Width = place.Width - 4
+        .Height = place.Height - 4
+        .Placement = xlMove
+        .OnAction = "'" & Replace(ThisWorkbook.Name, "'", "''") & "'!" & macroName
+        .AlternativeText = buttonText
+        .Fill.ForeColor.RGB = fillColor
+        .Line.Visible = msoFalse
+        .TextFrame.Characters.Text = buttonText
+        .TextFrame.HorizontalAlignment = xlHAlignCenter
+        .TextFrame.VerticalAlignment = xlVAlignCenter
+        With .TextFrame.Characters.Font
+            .Name = "Yu Gothic"
+            .Size = 11
+            .Bold = True
+            .Color = vbWhite
+        End With
+    End With
+End Sub
