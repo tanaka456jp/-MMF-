@@ -26,7 +26,7 @@ End Sub
 Public Sub MMF口座_2口座シート作成()
     If MMF口座_初期設定(True) Then
         MsgBox "「一般口座」「特定口座」を利用できます。" & vbCrLf & _
-               "まとめ表は「MMF口座_まとめ表更新」で作成してください。", _
+               "各口座の「まとめ表更新」ボタンで作成してください。", _
                vbInformation, "外貨建MMF"
     End If
 End Sub
