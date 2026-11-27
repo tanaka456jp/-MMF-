@@ -76,6 +76,11 @@
             "type": "standard",
             "name": "ModuleMMFFX",
             "file": "standard/ModuleMMFFX.bas"
+        },
+        {
+            "type": "standard",
+            "name": "ModuleMMFAccounts",
+            "file": "standard/ModuleMMFAccounts.bas"
         }
     ],
     "compileGate": {
@@ -115,6 +120,10 @@
             {
                 "type": "standard",
                 "name": "ModuleMMFFX"
+            },
+            {
+                "type": "standard",
+                "name": "ModuleMMFAccounts"
             }
         ]
     }
