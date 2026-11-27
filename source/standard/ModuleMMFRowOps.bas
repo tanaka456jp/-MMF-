@@ -192,6 +192,70 @@ Failed:
     Resume CleanExit
 End Sub
 
+' ブック起動時に口座別台帳の式を一括点検し、#REF!や行参照ずれを修復する。
+Public Sub MMF台帳_起動時点検()
+    Dim names As Variant, item As Variant, ws As Worksheet
+    Dim fixedCount As Long
+
+    names = Array("一般口座", "特定口座")
+    For Each item In names
+        Set ws = Nothing
+        On Error Resume Next
+        Set ws = ThisWorkbook.Worksheets(CStr(item))
+        On Error GoTo 0
+        If Not ws Is Nothing Then
+            If MMF台帳_式ずれ検出(ws) Then
+                If MMF台帳_数式復元(ws, False) Then fixedCount = fixedCount + 1
+            End If
+        End If
+    Next item
+
+    If fixedCount > 0 Then
+        Call MMF口座_まとめ更新(True)
+        MsgBox CStr(fixedCount) & "口座の計算式を再構築しました。" & vbCrLf & _
+               "行削除後の参照ずれを修復しています。", _
+               vbInformation, "外貨建MMF"
+    End If
+End Sub
+
+Private Function MMF台帳_式ずれ検出(ByVal ws As Worksheet) As Boolean
+    Dim source As Worksheet
+    Dim originFirst As Variant, originOther As Variant
+    Dim current As Variant
+    Dim r As Long, c As Long, lastRow As Long
+    Dim expectFormula As String
+    Dim cellValue As Variant
+
+    On Error GoTo NeedsAttention
+    Set source = ThisWorkbook.Worksheets("MMF取引台帳")
+    If Not MMF台帳_ひな形有効(source) Then GoTo NeedsAttention
+
+    originFirst = source.Range("K12:Y12").FormulaR1C1
+    originOther = source.Range("K13:Y13").FormulaR1C1
+    lastRow = MMF台帳_最終入力行(ws)
+    If lastRow > MMF_MAX_LAST Then GoTo NeedsAttention
+
+    current = ws.Range("K12:Y" & lastRow).FormulaR1C1
+    For r = 1 To lastRow - MMF_FIRST + 1
+        For c = 1 To 15
+            cellValue = current(r, c)
+            If IsError(cellValue) Then GoTo NeedsAttention
+            If r = 1 Then
+                expectFormula = CStr(originFirst(1, c))
+            Else
+                expectFormula = CStr(originOther(1, c))
+            End If
+            If StrComp(CStr(cellValue), expectFormula, vbBinaryCompare) <> 0 Then
+                GoTo NeedsAttention
+            End If
+        Next c
+    Next r
+    Exit Function
+
+NeedsAttention:
+    MMF台帳_式ずれ検出 = True
+End Function
+
 ' Excel標準の行削除・行挿入で K:Yの計算式が壊れた場合に手動修復する。
 ' 数式だけを書き換え、A:Jの入力値は絶対に変更しない。
 Public Sub MMF台帳_計算式修復()
