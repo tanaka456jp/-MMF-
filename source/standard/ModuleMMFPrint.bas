@@ -92,7 +92,11 @@ Public Sub MMF印刷_ボタン設置()
 
     On Error GoTo SetupFailed
     Set ledger = ThisWorkbook.Worksheets(DEFAULT_SOURCE)
-    MMF印刷_ボタン更新 ledger, ledger.Range("I3:L4"), "MMF_A4PrintButtonLedger"
+    ' 移行後の旧台帳はVeryHidden。表示されている口座シートだけに配置する。
+    If ledger.Visible = xlSheetVisible Then
+        MMF印刷_ボタン更新 ledger, ledger.Range("I3:L4"), _
+                          "MMF_A4PrintButtonLedger"
+    End If
 
     For Each nameValue In Array("一般口座", "特定口座")
         On Error Resume Next
