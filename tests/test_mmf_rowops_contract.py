@@ -97,6 +97,43 @@ class MMFRowOpsContracts(unittest.TestCase):
         self.assertIn('If MMF台帳_式ずれ検出(ws) Then', ROWOPS)
         self.assertIn('If MMF台帳_数式復元(ws, False) Then fixedCount', ROWOPS)
 
+    def test_ledger_toolbar_is_installed_at_open_and_has_direct_actions(self):
+        self.assertEqual(WORKBOOK.count("Call MMF操作_ボタン設置"), 1)
+        for place, caption, macro in (
+            ("A9:B9", "行削除 [F7]", "MMF操作_行削除"),
+            ("C9:D9", "行追加 [F8]", "MMF操作_行追加"),
+            ("E9:F9", "計算式修復", "MMF台帳_計算式修復"),
+            ("G9:H9", "まとめ表更新", "MMF口座_まとめ表更新"),
+            ("I9:J9", "別ブック取込", "MMF口座_別ブックから取込"),
+            ("K9:L9", "操作ガイド", "MMF操作_ガイド"),
+        ):
+            self.assertIn(f'ws.Range("{place}")', ROWOPS)
+            self.assertIn(f'"{caption}", "{macro}"', ROWOPS)
+        self.assertIn('If MMF台帳_対象(ws) And ws.Visible = xlSheetVisible Then', ROWOPS)
+        self.assertIn('Application.CountA(ws.Range("A9:L9")) > 0', ROWOPS)
+        self.assertIn('Set btn = ws.Shapes(shapeId)', ROWOPS)
+        self.assertIn('If btn Is Nothing Then', ROWOPS)
+        self.assertNotIn('.PrintObject = False', ROWOPS)
+
+    def test_toolbar_keeps_row_selection_safe_and_returns_to_ledger(self):
+        self.assertIn('If Not MMF操作_選択確認() Then Exit Sub', ROWOPS)
+        self.assertIn('If Selection.Row >= MMF_FIRST Then', ROWOPS)
+        self.assertIn('ws.Cells(selectedRows(n) + 1, 1).Select', ROWOPS)
+        self.assertIn('ws.Cells(selectedRows(n), 1).Select', ROWOPS)
+        self.assertIn('AllowDeletingRows:=allowDelRows', ROWOPS)
+        self.assertIn('If didUnprotect Then', ROWOPS)
+        self.assertIn('Call MMF口座_2口座シート作成', ROWOPS)
+
+    def test_print_view_uses_buttons_instead_of_macro_list(self):
+        code = (ROOT / "source/standard/ModuleMMFPrint.bas").read_text(encoding="utf-8")
+        self.assertIn('Call MMF操作_印刷補助設置(output)', code)
+        self.assertIn('Call MMF操作_印刷補助設置(out)', code)
+        self.assertIn('ws.Range("N11:O12")', ROWOPS)
+        self.assertIn('ws.Range("N13:O14")', ROWOPS)
+        self.assertIn('If CStr(ws.Range("N5").Value2) <> "更新方法" Then Exit Sub', ROWOPS)
+        self.assertIn('下の「印刷明細更新」をクリック', code)
+        self.assertNotIn('Alt+F8：MMF印刷_', code)
+
     def test_general_specific_and_legacy_names(self):
         for name in ('"MMF取引台帳"', '"一般口座"', '"特定口座"'):
             self.assertIn(name, ROWOPS)
