@@ -538,6 +538,13 @@ Sub F7_行削除()
     Dim i As Long, j As Long, temp As Long
 
     Set ws = ActiveSheet
+
+    ' MMFは行全体の削除・コピーを禁止し、入力A:Jのみ安全に移動する。
+    If MMF台帳_対象(ws) Then
+        Call MMF台帳_選択行削除
+        Exit Sub
+    End If
+
     Set dict = CreateObject("Scripting.Dictionary")
 
     If TypeName(Selection) <> "Range" Then Exit Sub
@@ -611,6 +618,13 @@ Sub F8_行追加()
     Dim baseRow As Long
 
     Set ws = ActiveSheet
+
+    ' MMFは行全体の削除・コピーを禁止し、入力A:Jのみ安全に移動する。
+    If MMF台帳_対象(ws) Then
+        Call MMF台帳_選択行追加
+        Exit Sub
+    End If
+
     Set dict = CreateObject("Scripting.Dictionary")
 
     If TypeName(Selection) <> "Range" Then Exit Sub
