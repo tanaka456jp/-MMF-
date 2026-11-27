@@ -561,6 +561,7 @@ End Sub
 ' 印刷シートの設定欄に既存マクロを直接呼び出すボタンを配置。
 ' A:Lの印刷範囲に重ならない。印刷再作成時にも呼び出される。
 Public Sub MMF操作_印刷補助設置(ByVal ws As Worksheet)
+    If CStr(ws.Range("N5").Value2) <> "更新方法" Then Exit Sub
     MMF操作_図形 ws, ws.Range("N11:O12"), "MMF_UI_PrintRefresh", _
         "印刷明細更新", "MMF印刷_1段表示へ更新", RGB(31, 90, 130)
     MMF操作_図形 ws, ws.Range("N13:O14"), "MMF_UI_PrintPreview", _
