@@ -250,6 +250,11 @@ Private Sub Workbook_BeforePrint(Cancel As Boolean)
 
     If Not (ActiveWorkbook Is Me) Then Exit Sub
     If TypeName(ActiveSheet) <> "Worksheet" Then Exit Sub
+
+    If ActiveSheet.Name = "口座別まとめ" Then
+        If Not MMF口座_まとめ更新(False) Then Cancel = True
+        Exit Sub
+    End If
     If ActiveSheet.Name <> "A4縦印刷" Then Exit Sub
 
     If Not MMF印刷_印刷直前更新() Then Cancel = True
