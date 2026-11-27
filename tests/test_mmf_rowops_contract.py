@@ -82,6 +82,21 @@ class MMFRowOpsContracts(unittest.TestCase):
         self.assertNotIn('"J" &', repair)
         self.assertIn('target.Calculate', repair)
 
+    def test_row_operation_rolls_back_inputs_on_error(self):
+        self.assertIn('inputsBefore = ws.Range("A12:J" & lastRow).FormulaR1C1', ROWOPS)
+        self.assertIn('ws.Range("A12:J" & lastRow).FormulaR1C1 = inputsBefore', ROWOPS)
+        self.assertIn('If dataChanged Then', ROWOPS)
+        self.assertIn('If Not MMF台帳_数式復元(ws, True) Then', ROWOPS)
+        self.assertIn('行操作を中止しました', ROWOPS)
+
+    def test_startup_scans_formula_column_references_and_repairs_on_drift(self):
+        self.assertEqual(1, WORKBOOK.count('Call MMF台帳_起動時点検'))
+        self.assertIn('Public Sub MMF台帳_起動時点検()', ROWOPS)
+        self.assertIn('current = ws.Range("K12:Y" & lastRow).FormulaR1C1', ROWOPS)
+        self.assertIn('StrComp(CStr(cellValue), expectFormula, vbBinaryCompare)', ROWOPS)
+        self.assertIn('If MMF台帳_式ずれ検出(ws) Then', ROWOPS)
+        self.assertIn('If MMF台帳_数式復元(ws, False) Then fixedCount', ROWOPS)
+
     def test_general_specific_and_legacy_names(self):
         for name in ('"MMF取引台帳"', '"一般口座"', '"特定口座"'):
             self.assertIn(name, ROWOPS)
