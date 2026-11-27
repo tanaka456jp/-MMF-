@@ -868,7 +868,7 @@ Private Sub MMF口座_イベント整列(ByRef d() As Double, ByRef acct() As Lo
 End Sub
 
 Private Sub MMF口座_ボタン(ByVal ws As Worksheet, ByVal place As Range, _
-                        ByVal shapeName As String, ByVal label As String, _
+                        ByVal shapeName As String, ByVal buttonCaption As String, _
                         ByVal action As String)
     Dim s As Shape
     On Error Resume Next
@@ -888,7 +888,7 @@ Private Sub MMF口座_ボタン(ByVal ws As Worksheet, ByVal place As Range, _
         .OnAction = "'" & Replace(ThisWorkbook.Name, "'", "''") & "'!" & action
         .Fill.ForeColor.RGB = RGB(31, 90, 130)
         .Line.ForeColor.RGB = RGB(20, 63, 94)
-        .TextFrame.Characters.Text = label
+        .TextFrame.Characters.Text = buttonCaption
         .TextFrame.HorizontalAlignment = xlHAlignCenter
         .TextFrame.VerticalAlignment = xlVAlignCenter
         With .TextFrame.Characters.Font
