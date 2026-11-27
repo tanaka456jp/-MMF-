@@ -30,9 +30,9 @@ Public Sub MMF口座_2口座シート作成()
     End If
 End Sub
 
-Private Function MMF口座_シート取得(ByVal name As String) As Worksheet
+Private Function MMF口座_シート取得(ByVal sheetName As String) As Worksheet
     On Error Resume Next
-    Set MMF口座_シート取得 = ThisWorkbook.Worksheets(name)
+    Set MMF口座_シート取得 = ThisWorkbook.Worksheets(sheetName)
     On Error GoTo 0
 End Function
 
@@ -293,8 +293,12 @@ Public Function MMF口座_まとめ更新(Optional ByVal quiet As Boolean = True
 
     If n > 1 Then MMF口座_イベント整列 d, acct, sourceRows, 1, n
 
-    If qty(1) + qty(2) > 0 And n > 0 Then
-        eventDate = d(1) - 1#
+    If qty(1) + qty(2) > 0 Then
+        If n > 0 Then
+            eventDate = d(1) - 1#
+        Else
+            eventDate = CDbl(Date)
+        End If
         MMF口座_行追加 records, eventDate, 0#, "期首残高（口座別簿価）", _
                            qty(2), qty(1), cost(1) + cost(2), valuePerUnit, True
     End If
@@ -318,9 +322,13 @@ Public Function MMF口座_まとめ更新(Optional ByVal quiet As Boolean = True
         If accountNo = 1 Then Set sourceWs = gen Else Set sourceWs = spec
         delta = 0#
         v = sourceWs.Cells(rowNo, "C").Value2
-        If IsNumeric(v) Then If CDbl(v) > 0 Then delta = CDbl(v)
+        If IsNumeric(v) Then
+            If CDbl(v) > 0 Then delta = CDbl(v)
+        End If
         v = sourceWs.Cells(rowNo, "E").Value2
-        If IsNumeric(v) Then If CDbl(v) > 0 Then delta = -CDbl(v)
+        If IsNumeric(v) Then
+            If CDbl(v) > 0 Then delta = -CDbl(v)
+        End If
 
         qty(accountNo) = CDbl(sourceWs.Cells(rowNo, "T").Value2)
         cost(accountNo) = CDbl(sourceWs.Cells(rowNo, "V").Value2)
