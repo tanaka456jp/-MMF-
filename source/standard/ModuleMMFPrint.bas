@@ -117,6 +117,7 @@ Public Sub MMF印刷_ボタン設置()
     If Not output Is Nothing Then
         If Not output.ProtectContents Then
             MMF印刷_ボタン更新 output, output.Range("N9:O10"), "MMF_A4PrintButtonView"
+            Call MMF操作_印刷補助設置(output)
         End If
     End If
     Exit Sub
@@ -418,11 +419,11 @@ Private Function MMF印刷_更新本体(ByVal quiet As Boolean) As Boolean
         .Range("N4").Value = "入力要確認件数"
         .Range("O4").Value = bad
         .Range("N5").Value = "更新方法"
-        .Range("O5").Value = "Alt+F8：MMF印刷_1段表示へ更新"
+        .Range("O5").Value = "下の「印刷明細更新」をクリック"
         .Range("N6").Value = "指定ページ番号"
         .Range("O6").Value = pageNo
         .Range("N7").Value = "指定頁プレビュー"
-        .Range("O7").Value = "Alt+F8：MMF印刷_指定頁プレビュー"
+        .Range("O7").Value = "O6でページ指定 → 下のボタン"
         .Range("O2").Interior.Color = RGB(255, 245, 211)
         .Range("O2").Font.Color = RGB(30, 88, 160)
         .Range("N2:N7").Interior.Color = RGB(235, 244, 249)
@@ -495,6 +496,7 @@ Private Function MMF印刷_更新本体(ByVal quiet As Boolean) As Boolean
 
     ' 印刷ビューの設定欄にもボタンを設置（A:L印刷範囲外）。
     MMF印刷_ボタン更新 out, out.Range("N9:O10"), "MMF_A4PrintButtonView"
+    Call MMF操作_印刷補助設置(out)
     out.Calculate
     success = True
     MMF印刷_更新本体 = True
