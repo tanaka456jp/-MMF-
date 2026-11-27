@@ -163,6 +163,132 @@ Private Sub MMF口座_台帳入力初期化(ByVal ws As Worksheet)
     ws.Range("F4").Value2 = 0
 End Sub
 
+' 既存の別ファイルで保有している口座取引を、空の口座シートへ取り込む。
+' 上書き・結合は行わない。移行元のファイルは常に読み取り専用。
+Public Sub MMF口座_別ブックから取込()
+    Dim chooser As Object
+    Dim sourceBook As Workbook
+    Dim sourceWs As Worksheet, targetWs As Worksheet
+    Dim sourceName As String, targetName As String, selectedFile As String
+    Dim answer As VbMsgBoxResult
+    Dim oldEvents As Boolean, oldScreen As Boolean, oldSecurity As Long
+    Dim sourceLast As Long, lastTarget As Long
+    Dim originalInput As Variant, originalStart As Variant
+    Dim dataWritten As Boolean, errorText As String
+
+    On Error GoTo Failed
+    If MMF口座_シート取得(GENERAL_LEDGER) Is Nothing Or _
+       MMF口座_シート取得(SPECIFIC_LEDGER) Is Nothing Then
+        Err.Raise vbObjectError + 841, , _
+                  "一般口座・特定口座のシートを先に作成してください。"
+    End If
+
+    answer = MsgBox("別ファイルの取引をどちらへ取り込みますか？" & vbCrLf & _
+                    "［はい］＝一般口座、［いいえ］＝特定口座" & vbCrLf & _
+                    "［キャンセル］＝中止", vbYesNoCancel + vbQuestion + _
+                    vbDefaultButton3, "MMF 既存取引の取り込み")
+    If answer = vbCancel Then Exit Sub
+    If answer = vbYes Then targetName = GENERAL_LEDGER Else targetName = SPECIFIC_LEDGER
+    Set targetWs = ThisWorkbook.Worksheets(targetName)
+
+    ' 既存入力への無断上書きは行わず、空の台帳に限って取り込む。
+    lastTarget = MMF口座_最終入力行(targetWs)
+    If Application.CountA(targetWs.Range("A12:J" & lastTarget)) > 0 Then
+        Err.Raise vbObjectError + 842, , _
+                  targetName & "に既存取引があります。上書きはしません。"
+    End If
+    If targetWs.ProtectContents Then
+        Err.Raise vbObjectError + 843, , _
+                  targetName & "のシート保護を解除してください。"
+    End If
+
+    Set chooser = Application.FileDialog(3)
+    chooser.AllowMultiSelect = False
+    chooser.Title = "取り込むMMF取得費計算ファイルを選択してください"
+    chooser.Filters.Clear
+    chooser.Filters.Add "Excelブック", "*.xlsm;*.xlsx"
+    If chooser.Show <> -1 Then Exit Sub
+    selectedFile = CStr(chooser.SelectedItems(1))
+    If StrComp(selectedFile, ThisWorkbook.FullName, vbTextCompare) = 0 Then
+        Err.Raise vbObjectError + 844, , "現在のブックは移行元として選択できません。"
+    End If
+
+    oldEvents = Application.EnableEvents
+    oldScreen = Application.ScreenUpdating
+    oldSecurity = Application.AutomationSecurity
+    Application.EnableEvents = False
+    Application.ScreenUpdating = False
+    Application.AutomationSecurity = 3   ' msoAutomationSecurityForceDisable
+
+    Set sourceBook = Application.Workbooks.Open( _
+        Filename:=selectedFile, UpdateLinks:=0, ReadOnly:=True)
+    Set sourceWs = Nothing
+    On Error Resume Next
+    Set sourceWs = sourceBook.Worksheets(targetName)
+    If sourceWs Is Nothing Then Set sourceWs = sourceBook.Worksheets(LEGACY_LEDGER)
+    On Error GoTo Failed
+    If sourceWs Is Nothing Then
+        Err.Raise vbObjectError + 845, , _
+                  "取り込み元に「" & targetName & "」または「MMF取引台帳」がありません。"
+    End If
+    If CStr(sourceWs.Range("C11").Value2) <> "買付数量" Or _
+       CStr(sourceWs.Range("E11").Value2) <> "売付数量" Then
+        Err.Raise vbObjectError + 846, , "取り込み元の台帳列構成が異なります。"
+    End If
+    If Trim$(CStr(sourceWs.Range("B3").Value2)) <> _
+       Trim$(CStr(targetWs.Range("B3").Value2)) Or _
+       Trim$(CStr(sourceWs.Range("F3").Value2)) <> _
+       Trim$(CStr(targetWs.Range("F3").Value2)) Then
+        Err.Raise vbObjectError + 847, , _
+                  "銘柄または通貨が一致しません。別銘柄の取引は取り込みません。"
+    End If
+    sourceLast = MMF口座_最終入力行(sourceWs)
+    If sourceLast > MIN_LAST_TRADE Then
+        Err.Raise vbObjectError + 848, , _
+                  "500行を超える入力があります。元台帳の分割を検討してください。"
+    End If
+
+    originalInput = targetWs.Range("A12:J511").Value2
+    originalStart = Array(targetWs.Range("B4").Value2, _
+                          targetWs.Range("D4").Value2, _
+                          targetWs.Range("F4").Value2)
+    dataWritten = True
+    targetWs.Range("A12:J511").Value2 = sourceWs.Range("A12:J511").Value2
+    targetWs.Range("B4").Value2 = sourceWs.Range("B4").Value2
+    targetWs.Range("D4").Value2 = sourceWs.Range("D4").Value2
+    targetWs.Range("F4").Value2 = sourceWs.Range("F4").Value2
+    targetWs.Calculate
+    dataWritten = False
+
+    MsgBox targetName & "に取引データを取り込みました。" & vbCrLf & _
+           "移行元ファイルには書き込んでいません。" & vbCrLf & _
+           "K列の入力判定を確認後、まとめ表を更新してください。", _
+           vbInformation, "外貨建MMF"
+
+CleanUp:
+    On Error Resume Next
+    If Not sourceBook Is Nothing Then sourceBook.Close SaveChanges:=False
+    Application.AutomationSecurity = oldSecurity
+    Application.EnableEvents = oldEvents
+    Application.ScreenUpdating = oldScreen
+    On Error GoTo 0
+    Exit Sub
+
+Failed:
+    errorText = Err.Description
+    If dataWritten Then
+        On Error Resume Next
+        targetWs.Range("A12:J511").Value2 = originalInput
+        targetWs.Range("B4").Value2 = originalStart(0)
+        targetWs.Range("D4").Value2 = originalStart(1)
+        targetWs.Range("F4").Value2 = originalStart(2)
+        On Error GoTo 0
+    End If
+    MsgBox "既存の別ブックから取り込めませんでした。" & vbCrLf & _
+           errorText, vbExclamation, "外貨建MMF"
+    Resume CleanUp
+End Sub
+
 Public Sub MMF口座_まとめ表更新()
     If MMF口座_まとめ更新(False) Then
         ThisWorkbook.Worksheets(SUMMARY_SHEET).Activate
@@ -514,6 +640,8 @@ Public Function MMF口座_まとめ更新(Optional ByVal quiet As Boolean = True
                        "まとめ表更新", "MMF口座_まとめ表更新"
     MMF口座_ボタン out, out.Range("J9:K10"), "MMF_SummaryPrint", _
                        "A4まとめ印刷", "MMF口座_まとめ表印刷"
+    MMF口座_ボタン out, out.Range("J12:K13"), "MMF_SummaryImport", _
+                       "別ブック取込", "MMF口座_別ブックから取込"
 
     MMF口座_まとめ更新 = True
 
