@@ -81,6 +81,11 @@
             "type": "standard",
             "name": "ModuleMMFAccounts",
             "file": "standard/ModuleMMFAccounts.bas"
+        },
+        {
+            "type": "standard",
+            "name": "ModuleMMFRowOps",
+            "file": "standard/ModuleMMFRowOps.bas"
         }
     ],
     "compileGate": {
@@ -124,6 +129,10 @@
             {
                 "type": "standard",
                 "name": "ModuleMMFAccounts"
+            },
+            {
+                "type": "standard",
+                "name": "ModuleMMFRowOps"
             }
         ]
     }
