@@ -133,6 +133,23 @@ class AccountSummaryContractTests(unittest.TestCase):
         self.assertEqual(specified + general, 19_206_782)
         self.assertEqual(round((specified + general) * 0.01), 192_068)
 
+    def test_period_summary_modes_and_unchanged_year_end_rows(self):
+        self.assertIn('displayMode = "年次"', SOURCE)
+        self.assertIn('If displayMode = "月次" Then', SOURCE)
+        self.assertIn('If displayMode = "明細" Then', SOURCE)
+        self.assertIn('Formula1:="年次,月次,明細"', SOURCE)
+        self.assertIn('Set printedRecords = MMF口座_表示単位集約(records, displayMode)', SOURCE)
+        self.assertIn('If CBool(r(0)) Then', SOURCE)
+        self.assertIn('result.Add r', SOURCE)
+        self.assertIn('groupSpec = groupSpec + CDbl(r(4))', SOURCE)
+        self.assertIn('groupGen = groupGen + CDbl(r(5))', SOURCE)
+
+    def test_boot_time_build_is_safe_and_year_end_snapshot_persists(self):
+        self.assertIn('Call MMF口座_まとめ更新(True)', SOURCE)
+        self.assertIn('If CDbl(v) < lastAccountDate Then', SOURCE)
+        self.assertIn('prevYear = prevYear + 1', SOURCE)
+        self.assertIn('If prevYear > 0 Then', SOURCE)
+
     def test_repeated_click_does_not_duplicate_buttons(self):
         self.assertIn("Set s = ws.Shapes(shapeName)", SOURCE)
         self.assertIn("If s Is Nothing Then", SOURCE)
