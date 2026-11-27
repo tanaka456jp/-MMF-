@@ -340,11 +340,12 @@ Public Function MMF口座_まとめ更新(Optional ByVal quiet As Boolean = True
     Dim qty(1 To 2) As Double, cost(1 To 2) As Double
     Dim delta As Double, amount As Double, unitValue As Double
     Dim opening As Variant, v As Variant, contents As Variant
-    Dim records As Collection, output() As Variant, rowValues As Variant
+    Dim records As Collection, printedRecords As Collection
+    Dim output() As Variant, rowValues As Variant
     Dim lastOut As Long, invalidRow As String, errText As String
     Dim name1 As String, name2 As String, ccy1 As String, ccy2 As String
     Dim oldEvents As Boolean, oldScreen As Boolean
-    Dim valuePerUnit As Double
+    Dim valuePerUnit As Double, displayMode As String
 
     If mSummaryRunning Then
         MMF口座_まとめ更新 = True
@@ -373,10 +374,16 @@ Public Function MMF口座_まとめ更新(Optional ByVal quiet As Boolean = True
 
     Set out = MMF口座_シート取得(SUMMARY_SHEET)
     valuePerUnit = 0.01
+    displayMode = "年次"
     If Not out Is Nothing Then
         v = out.Range("K2").Value2
         If IsNumeric(v) Then
             If CDbl(v) > 0 Then valuePerUnit = CDbl(v)
+        End If
+        v = out.Range("K5").Value2
+        If Not IsError(v) Then
+            If CStr(v) = "年次" Or CStr(v) = "月次" Or CStr(v) = "明細" Then _
+                displayMode = CStr(v)
         End If
     End If
 
@@ -508,7 +515,9 @@ Public Function MMF口座_まとめ更新(Optional ByVal quiet As Boolean = True
                     qty(2), qty(1), cost(1) + cost(2), valuePerUnit, True
     End If
     ' 数量・円貨簿価は口座ごとに計算。合計取得単価は表示用加重平均。
+    ' 年次・月次集計は同方向の取引をまとめ、期末残高行は必ず保存する。
     ' 口座をまたぐ移管を売買入力だけで代用しないこと（別途調整が必要）。
+    Set printedRecords = MMF口座_表示単位集約(records, displayMode)
 
     If out Is Nothing Then
         Set out = ThisWorkbook.Worksheets.Add(After:=spec)
@@ -588,17 +597,27 @@ Public Function MMF口座_まとめ更新(Optional ByVal quiet As Boolean = True
         .Range("K3").Value = "特定口座 ＋ 一般口座"
         .Range("J4").Value = "集計取引件数"
         .Range("K4").Value = n
+        .Range("J5").Value = "表示単位"
+        .Range("K5").Value = displayMode
+        .Range("K5").Interior.Color = RGB(255, 244, 202)
+        With .Range("K5").Validation
+            .Delete
+            .Add Type:=xlValidateList, AlertStyle:=xlValidAlertStop, _
+                 Operator:=xlBetween, Formula1:="年次,月次,明細"
+            .IgnoreBlank = False
+            .InCellDropdown = True
+        End With
 
-        If records.Count > 0 Then
-            ReDim output(1 To records.Count, 1 To 8)
-            For rowIndex = 1 To records.Count
-                rowValues = records.Item(rowIndex)
+        If printedRecords.Count > 0 Then
+            ReDim output(1 To printedRecords.Count, 1 To 8)
+            For rowIndex = 1 To printedRecords.Count
+                rowValues = printedRecords.Item(rowIndex)
                 For col = 1 To 8
                     output(rowIndex, col) = rowValues(col)
                 Next col
             Next rowIndex
-            .Range("A" & FIRST_SUMMARY_ROW).Resize(records.Count, 8).Value = output
-            lastOut = FIRST_SUMMARY_ROW + records.Count - 1
+            .Range("A" & FIRST_SUMMARY_ROW).Resize(printedRecords.Count, 8).Value = output
+            lastOut = FIRST_SUMMARY_ROW + printedRecords.Count - 1
             With .Range("A6:H" & lastOut)
                 .RowHeight = 20
                 .Borders.LineStyle = xlContinuous
@@ -613,8 +632,8 @@ Public Function MMF口座_まとめ更新(Optional ByVal quiet As Boolean = True
             .Range("C6:C" & lastOut).HorizontalAlignment = xlLeft
             .Range("D6:H" & lastOut).HorizontalAlignment = xlRight
 
-            For rowIndex = 1 To records.Count
-                rowValues = records.Item(rowIndex)
+            For rowIndex = 1 To printedRecords.Count
+                rowValues = printedRecords.Item(rowIndex)
                 If CBool(rowValues(0)) Then
                     With .Range("A" & FIRST_SUMMARY_ROW + rowIndex - 1 & _
                                 ":H" & FIRST_SUMMARY_ROW + rowIndex - 1)
@@ -685,6 +704,86 @@ Failure:
     End If
     MMF口座_まとめ更新 = False
     Resume Finish
+End Function
+
+' まとめ表の既定表示は年次。必要な場合はK5で月次・明細を選択できる。
+' 残高は集約グループの最後の取引時点の残高とし、日付順の計算結果を維持。
+Private Function MMF口座_表示単位集約(ByVal records As Collection, _
+                                     ByVal displayMode As String) As Collection
+    Dim result As Collection
+    Dim i As Long, r As Variant, key As String, previousKey As String
+    Dim periodStart As Variant, periodEnd As Variant, note As String
+    Dim groupSpec As Double, groupGen As Double
+    Dim avg As Variant, endQty As Variant, endForeign As Variant
+    Dim hasGroup As Boolean
+
+    Set result = New Collection
+    If displayMode = "明細" Then
+        For i = 1 To records.Count
+            result.Add records(i)
+        Next i
+        Set MMF口座_表示単位集約 = result
+        Exit Function
+    End If
+
+    For i = 1 To records.Count
+        r = records.Item(i)
+        If CBool(r(0)) Then
+            If hasGroup Then
+                result.Add Array(False, periodStart, periodEnd, note, _
+                                 groupSpec, groupGen, avg, endQty, endForeign)
+                hasGroup = False
+            End If
+            result.Add r
+        Else
+            If displayMode = "月次" Then
+                key = Format$(CDate(r(1)), "yyyymm")
+            Else
+                key = Format$(CDate(r(1)), "yyyy")
+            End If
+
+            If CDbl(r(4)) + CDbl(r(5)) >= 0 Then
+                key = key & "買付"
+                note = "買付・再投資（" & displayMode & "集計）"
+            Else
+                key = key & "売却"
+                note = "売却（" & displayMode & "集計）"
+            End If
+            If hasGroup Then
+                If key <> previousKey Then
+                    result.Add Array(False, periodStart, periodEnd, _
+                                     IIf(InStr(previousKey, "買付") > 0, _
+                                         "買付・再投資（" & displayMode & "集計）", _
+                                         "売却（" & displayMode & "集計）"), _
+                                     groupSpec, groupGen, avg, endQty, endForeign)
+                    hasGroup = False
+                End If
+            End If
+            If Not hasGroup Then
+                previousKey = key
+                periodStart = r(1)
+                periodEnd = r(2)
+                groupSpec = 0#
+                groupGen = 0#
+                hasGroup = True
+            End If
+            groupSpec = groupSpec + CDbl(r(4))
+            groupGen = groupGen + CDbl(r(5))
+            periodEnd = r(2)
+            avg = r(6)
+            endQty = r(7)
+            endForeign = r(8)
+        End If
+    Next i
+
+    If hasGroup Then
+        result.Add Array(False, periodStart, periodEnd, _
+                         IIf(InStr(previousKey, "買付") > 0, _
+                             "買付・再投資（" & displayMode & "集計）", _
+                             "売却（" & displayMode & "集計）"), _
+                         groupSpec, groupGen, avg, endQty, endForeign)
+    End If
+    Set MMF口座_表示単位集約 = result
 End Function
 
 Private Function MMF口座_最終入力行(ByVal ws As Worksheet) As Long
