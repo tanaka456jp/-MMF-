@@ -231,6 +231,7 @@ Private Sub Workbook_Open()
 
     ' 各口座のA4印刷ボタンを設置・更新
     Call MMF印刷_ボタン設置
+    Call MMF操作_ボタン設置
 
 End Sub
 
@@ -279,6 +280,6 @@ Private Sub Workbook_SheetChange(ByVal Sh As Object, ByVal Target As Range)
 
 ChangeFailed:
     MsgBox "MMFの行変更時の数式確認に失敗しました。" & vbCrLf & _
-           "「MMF台帳_計算式修復」を実行してください。" & vbCrLf & _
+           "台帳上部の「計算式修復」ボタンを押してください。" & vbCrLf & _
            Err.Description, vbExclamation, "外貨建MMF"
 End Sub
