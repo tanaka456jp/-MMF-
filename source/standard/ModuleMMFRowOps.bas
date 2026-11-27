@@ -38,6 +38,7 @@ Private Sub MMF台帳_選択行編集(ByVal addMode As Boolean)
     Dim oldEvents As Boolean, oldScreen As Boolean, oldCalc As XlCalculation
     Dim wasProtected As Boolean, stateTaken As Boolean, success As Boolean
     Dim actionName As String, errDetail As String
+    Dim inputsBefore As Variant, dataChanged As Boolean
 
     If mRowHandling Then Exit Sub
     On Error GoTo Failed
@@ -121,6 +122,15 @@ Private Sub MMF台帳_選択行編集(ByVal addMode As Boolean)
         Err.Raise vbObjectError + 917, , "台帳の保護を解除できませんでした。"
     End If
 
+    ' 参照式の破損がある場合はデータ移動前に先に修復する。
+    If Not MMF台帳_数式復元(ws, True) Then
+        Err.Raise vbObjectError + 919, , _
+                  "正常な計算式のひな形が見つかりません。行操作を中止しました。"
+    End If
+    ' 操作途中で失敗した場合に元入力を戻す（Excelの通常のUndoは使用できない）。
+    inputsBefore = ws.Range("A12:J" & lastRow).FormulaR1C1
+    dataChanged = True
+
     For i = 1 To n
         rowNumber = selectedRows(i)
         If addMode Then
@@ -170,6 +180,13 @@ CleanExit:
 
 Failed:
     errDetail = Err.Description
+    If dataChanged Then
+        On Error Resume Next
+        Application.EnableEvents = False
+        ws.Range("A12:J" & lastRow).FormulaR1C1 = inputsBefore
+        Call MMF台帳_数式復元(ws, True)
+        On Error GoTo 0
+    End If
     MsgBox "MMFの行" & actionName & "を実行できませんでした。" & vbCrLf & _
            errDetail, vbExclamation, "外貨建MMF"
     Resume CleanExit
