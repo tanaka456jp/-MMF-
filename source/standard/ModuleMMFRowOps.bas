@@ -198,7 +198,7 @@ Public Sub MMF台帳_構造変更時修復(ByVal sh As Object, ByVal changed As 
     Set ws = sh
     If Not MMF台帳_対象(ws) Then Exit Sub
     If changed.Row > MMF_MAX_LAST Then Exit Sub
-    If changed.Columns.CountLarge < 10 Then Exit Sub
+    ' 列全体を削除／一部セルをシフトした場合も数式欠損を検出する。
     Set hit = Application.Intersect(changed, ws.Range("K12:Y" & MMF_MAX_LAST))
     If hit Is Nothing Then Exit Sub
     ' 標準の「シート行全体の削除」で式列まで移動した場合の救済。
