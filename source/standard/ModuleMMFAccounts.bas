@@ -18,7 +18,8 @@ Private mSetupRunning As Boolean
 ' 起動時に実行。データの所属が未確定なら初回だけ確認する。
 Public Sub MMF口座_起動時設定()
     If Not MMF口座_初期設定(False) Then Exit Sub
-    ' 初回セットアップ時だけではなく、印刷の選択元となるシートを維持。
+    ' 必要な条件が整えばブック起動時にまとめ表も更新する。
+    Call MMF口座_まとめ更新(True)
 End Sub
 
 ' Alt+F8から任意実行（アップデーター適用直後はこちらでも可）。
@@ -40,7 +41,7 @@ Private Function MMF口座_初期設定(ByVal showErrors As Boolean) As Boolean
     Dim source As Worksheet, gen As Worksheet, spec As Worksheet
     Dim carryToGeneral As Boolean, haveTrades As Boolean
     Dim answer As VbMsgBoxResult
-    Dim oldEvents As Boolean, oldScreen As Boolean
+    Dim oldEvents As Boolean, oldScreen As Boolean, oldAlerts As Boolean
     Dim createdGeneral As Boolean, createdSpecific As Boolean
     Dim failure As String
 
@@ -48,6 +49,7 @@ Private Function MMF口座_初期設定(ByVal showErrors As Boolean) As Boolean
     mSetupRunning = True
     oldEvents = Application.EnableEvents
     oldScreen = Application.ScreenUpdating
+    oldAlerts = Application.DisplayAlerts
     On Error GoTo Failure
 
     Set gen = MMF口座_シート取得(GENERAL_LEDGER)
@@ -132,6 +134,7 @@ CleanExit:
     On Error Resume Next
     Application.EnableEvents = oldEvents
     Application.ScreenUpdating = oldScreen
+    Application.DisplayAlerts = oldAlerts
     mSetupRunning = False
     On Error GoTo 0
     Exit Function
@@ -143,7 +146,7 @@ Failure:
     Application.DisplayAlerts = False
     If createdSpecific Then spec.Delete
     If createdGeneral Then gen.Delete
-    Application.DisplayAlerts = True
+    Application.DisplayAlerts = oldAlerts
     If Not source Is Nothing Then source.Visible = xlSheetVisible
     On Error GoTo 0
     If showErrors Then
@@ -333,7 +336,7 @@ Public Function MMF口座_まとめ更新(Optional ByVal quiet As Boolean = True
     Dim allRows As Long, n As Long, idx As Long, lastRow As Long
     Dim accountNo As Long, rowNo As Long, prevYear As Long, yearNo As Long
     Dim rowIndex As Long, col As Long
-    Dim sourceWs As Worksheet, eventDate As Double
+    Dim sourceWs As Worksheet, eventDate As Double, lastAccountDate As Double
     Dim qty(1 To 2) As Double, cost(1 To 2) As Double
     Dim delta As Double, amount As Double, unitValue As Double
     Dim opening As Variant, v As Variant, contents As Variant
@@ -401,6 +404,7 @@ Public Function MMF口座_まとめ更新(Optional ByVal quiet As Boolean = True
         End If
 
         sourceWs.Calculate
+        lastAccountDate = 0#
         lastRow = MMF口座_最終入力行(sourceWs)
         If lastRow > FIRST_TRADE + MAX_TRADE_ROWS - 1 Then
             Err.Raise vbObjectError + 825, , _
@@ -414,6 +418,12 @@ Public Function MMF口座_まとめ更新(Optional ByVal quiet As Boolean = True
                 v = sourceWs.Cells(rowNo, "A").Value2
                 If Not IsNumeric(v) Then GoTo InvalidTransaction
                 If CDbl(v) < 61# Then GoTo InvalidTransaction
+                If CDbl(v) < lastAccountDate Then
+                    Err.Raise vbObjectError + 829, , _
+                              sourceWs.Name & "!" & CStr(rowNo) & _
+                              "の日付が前行よりも前です。日付順に入力してください。"
+                End If
+                lastAccountDate = CDbl(v)
                 If Not IsNumeric(sourceWs.Cells(rowNo, "T").Value2) Or _
                    Not IsNumeric(sourceWs.Cells(rowNo, "V").Value2) Then
                     GoTo InvalidTransaction
@@ -706,10 +716,10 @@ Private Sub MMF口座_行追加(ByVal records As Collection, ByVal dateStart As 
     If total > 0 Then avgPrice = Round(totalCost / total, 9)
     If snapshot Then
         records.Add Array(True, CDate(dateStart), Empty, notes, specific, general, _
-                          avgPrice, total, WorksheetFunction.Round(total * valuePerUnit, 0))
+                          avgPrice, total, Application.WorksheetFunction.Round(total * valuePerUnit, 0))
     Else
         records.Add Array(False, CDate(dateStart), CDate(dateEnd), notes, specific, general, _
-                          avgPrice, total, WorksheetFunction.Round(total * valuePerUnit, 0))
+                          avgPrice, total, Application.WorksheetFunction.Round(total * valuePerUnit, 0))
     End If
 End Sub
 
