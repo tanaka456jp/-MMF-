@@ -265,3 +265,17 @@ PrintFailed:
     MsgBox "A4縦印刷シートの更新中に問題が発生したため、印刷を中止しました。" & _
            vbCrLf & Err.Description, vbExclamation
 End Sub
+
+
+' Excelの標準「行全体を削除」で数式列まで動いた場合に修復する。
+' 取引入力A:Jだけの変更では発火しても何もしない。
+Private Sub Workbook_SheetChange(ByVal Sh As Object, ByVal Target As Range)
+    On Error GoTo ChangeFailed
+    Call MMF台帳_構造変更時修復(Sh, Target)
+    Exit Sub
+
+ChangeFailed:
+    MsgBox "MMFの行変更時の数式確認に失敗しました。" & vbCrLf & _
+           "「MMF台帳_計算式修復」を実行してください。" & vbCrLf & _
+           Err.Description, vbExclamation, "外貨建MMF"
+End Sub
